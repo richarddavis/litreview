@@ -10,18 +10,15 @@ class DatabasePaperMixin():
         pass
 
     def add_paper(self, paper):
-        paper_ref = self._get_paper(paper)
+        paper_ref = self._get_paper_by_title(paper.title)
         if paper_ref is not None:
             print("Paper already in database.")
-            # return Paper.from_ref(paper_ref)
         else:
             print("Adding paper to database.")
             for author in paper.authors:
                 new_author = Author(**author)
                 self.add_author(new_author)
             self._get_papers().add(paper.to_dict())
-            # paper_ref = self._get_papers().add(paper.to_dict())[1]
-            # return Paper.from_ref(paper_ref)
 
     def _get_papers(self):
         return self.db.collection(u'papers')
@@ -29,7 +26,6 @@ class DatabasePaperMixin():
     def _get_paper(self, paper):
         # This function checks the database for a paper with the same id.
         # If the paper hasn't been added, its ID is None.
-
         try:
             papers = self._get_papers()
             p = papers.document(paper.id)
@@ -37,18 +33,12 @@ class DatabasePaperMixin():
         except google.cloud.exceptions.NotFound:
             return None
 
-        # papers = list(self._get_papers().where(u'id', u'==', paper.id).stream())
-        # if len(papers) == 0:
-        #     return None
-        # else:
-        #     return papers[0]
-
-    def get_paper_by_doi(self, doi):
-        papers = list(self._get_papers().where(u'doi', u'==', doi).stream())
-        if len(papers) == 0:
-            return None
-        else:
-            return Paper.from_ref(papers[0])
+    def _get_paper_by_title(self, title):
+        papers = self._get_papers().get()
+        for p in papers:
+            if p.to_dict()[u'title'].lower() == title.lower():
+                return Paper.from_ref(p)
+        return None
 
     def get_paper(self, paper):
         try:
@@ -57,17 +47,9 @@ class DatabasePaperMixin():
         except google.cloud.exceptions.NotFound:
             return None
 
-        # papers = list(self._get_papers().where(u'id', u'==', paper.id).stream())
-        # if len(papers) == 0:
-        #     return None
-        # else:
-        #     return Paper.from_ref(papers[0])
-
     def get_papers(self):
         papers = self._get_papers()
         return [Paper.from_ref(p) for p in papers.stream()]
-
-    # --------------------------------------------------
 
     def add_note(self, note, paper):
         paper_ref = self._get_paper(paper)

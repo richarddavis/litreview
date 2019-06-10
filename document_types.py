@@ -1,28 +1,43 @@
 class Paper():
-    def __init__(self, title, doi, authors, year, id=None):
+    def __init__(self, title, authors, year=None, doi=None, id=None):
         self.title = title
-        self.doi = doi.lower()
         self.authors = authors
-        self.year = int(year)
+        self.year = year
+        if self.year is not None:
+            self.year = int(year)
+        self.doi = doi
+        if self.doi is not None:
+            self.doi = doi.lower()
         self.id = id
 
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        paper = Paper(source[u'title'], source[u'doi'], source[u'authors'], \
-                      source[u'year'], ref.id)
+        paper = Paper(source[u'title'], source[u'authors'], id=ref.id)
+
+        if u'year' in source:
+            paper.year = source[u'year']
+
+        if u'doi' in source:
+            paper.doi = source[u'doi']
+
         return paper
 
     def to_dict(self):
         paper = {
             u'title': self.title,
-            u'doi': self.doi,
             u'authors': self.authors,
-            u'year': self.year,
         }
+
+        if self.year is not None:
+            paper[u'year'] = self.year
+
+        if self.doi is not None:
+            paper[u'doi'] = self.doi
 
         if self.id is not None:
             paper[u'id'] = self.id
+
         return paper
 
 class Author():
@@ -36,7 +51,7 @@ class Author():
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        author = Author(source[u'lastname'], source[u'firstname'], ref.id)
+        author = Author(source[u'lastname'], source[u'firstname'], id=ref.id)
 
         if u'affiliation' in source:
             author.affiliation = source[u'affiliation']
@@ -81,7 +96,7 @@ class Note():
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        note = Note(source[u'ref_id'], source[u'notetype'], source[u'body'], ref.id)
+        note = Note(source[u'ref_id'], source[u'notetype'], source[u'body'], id=ref.id)
         if u'page' in source:
             note.page = source[u'page']
         return note

@@ -46,10 +46,14 @@ class LitreviewShell(cmd2.Cmd):
             paper_dict[u'authors'].append({u'lastname':lastname, u'firstname':firstname})
             print("")
         print("")
-        paper_dict[u'doi'] = input('DOI: ')
-        print("")
-        paper_dict[u'year'] = input('Year: ')
-        print("")
+        year = input('Year: ')
+        if year is not None:
+            paper_dict[u'year'] = year
+            print("")
+        doi = input('DOI: ')
+        if doi is not "":
+            paper_dict[u'doi'] = doi
+            print("")
         paper = Paper(**paper_dict)
         self.db.add_paper(paper)
         self.all_papers = self.db.get_papers()
