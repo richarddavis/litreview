@@ -80,16 +80,16 @@ class DatabaseNoteMixin():
 
     def get_notes_by_obj(self, obj, notetype):
         notes = self._get_notes(notetype).where(u'ref_id', u'==', obj.id).stream()
-        note_list = [Note.from_ref(note) for note in notes if note.to_dict()['notetype'] == notetype]
+        note_list = [Note.from_ref(note) for note in notes]
         return note_list
 
-    def get_notetypes_by_obj(self, obj):
-        notetypes = []
+    def get_all_notes_by_obj(self, obj):
+        all_notes = []
         for notetype in Note.valid_notetypes:
             notes = self._get_notes(notetype).where(u'ref_id', u'==', obj.id).stream()
-            if len(list(notes)) != 0:
-                notetypes.append(notetype)
-        return notetypes
+            note_list = [Note.from_ref(note) for note in notes]
+            all_notes += note_list
+        return all_notes
 
 class Database(DatabaseNoteMixin, DatabaseAuthorMixin, DatabasePaperMixin):
     def __init__(self):

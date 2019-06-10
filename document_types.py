@@ -66,13 +66,15 @@ class Author():
 class Note():
     valid_notetypes = ["notes", "selections", "ideas", \
                        "todos", "measures", "designs", \
-                       "procedures", "results", "summaries"]
+                       "procedures", "results", "summaries",
+                       "challenges"]
 
-    def __init__(self, ref_id, notetype, body, id=None):
+    def __init__(self, ref_id, notetype, body, id=None, page=None):
         self.ref_id = ref_id
         self.notetype = notetype
         self.body = body
         self.id = id
+        self.page = page
         if self.notetype not in Note.valid_notetypes:
             raise ValueError(u'{0} is not a valid notetype'.format(notetype))
 
@@ -80,6 +82,8 @@ class Note():
     def from_ref(ref):
         source = ref.to_dict()
         note = Note(source[u'ref_id'], source[u'notetype'], source[u'body'], ref.id)
+        if u'page' in source:
+            note.page = page
         return note
 
     def to_dict(self):
@@ -91,5 +95,8 @@ class Note():
 
         if self.id is not None:
             note[u'id'] = self.id
+
+        if self.page is not None:
+            note[u'page'] = self.page
 
         return note
