@@ -20,7 +20,7 @@ class LitreviewShell(cmd2.Cmd):
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
         self.note_history = []
-        self.papers = self.db.get_papers()
+        self.all_papers = self.db.get_papers()
 
     def print_indented(self, formatted_text, indentation_multiplier = 1):
         print(textwrap.fill(formatted_text,
@@ -52,39 +52,38 @@ class LitreviewShell(cmd2.Cmd):
         print("")
         paper = Paper(**paper_dict)
         self.db.add_paper(paper)
-        self.papers = self.db.get_papers()
+        self.all_papers = self.db.get_papers()
 
     def do_show_papers(self, line):
         paper_index = 0
-        for paper in self.papers:
+        for paper in self.all_papers:
             self.do_show_paper_info(str(paper_index))
             paper_index += 1
 
     def do_select_paper(self, line):
-        while not (line != "" and line.isnumeric() and int(line) < len(self.papers) and int(line) >= 0):
+        while not (line != "" and line.isnumeric() and int(line) < len(self.all_papers) and int(line) >= 0):
             print("")
             paper_index = 0
-            for paper in self.papers:
+            for paper in self.all_papers:
                 self.print_indented("[{0}]: {1}".format(paper_index, paper.title))
                 paper_index += 1
                 print("")
             line = input('Please select a paper: ')
 
-        self.current_paper = self.papers[int(line)]
+        self.current_paper = self.all_papers[int(line)]
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
-        # self.do_show_notes("")
         self.do_show_note_tree("")
 
     def do_show_paper_info(self, line):
         print("")
         paper = None
         if line != "" and line.isnumeric():
-            if int(line) >= len(self.papers) or int(line) < 0:
+            if int(line) >= len(self.all_papers) or int(line) < 0:
                 print("That paper does not exist.")
                 print("")
                 return
             else:
-                paper = self.papers[int(line)]
+                paper = self.all_papers[int(line)]
                 self.print_indented("[{}]".format(line))
         else:
             if self.current_paper == None:
@@ -99,16 +98,32 @@ class LitreviewShell(cmd2.Cmd):
             self.print_indented("{0}, {1}".format(author[u'lastname'], author[u'firstname']), 2)
         self.print_indented("DOI: {0}".format(paper.doi))
         self.print_indented("Year: {0}".format(paper.year))
-        self.print_indented("Attached notetypes:")
+        self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(paper))))
+
         # notetypes = self.db.get_notetypes_by_obj(paper)
-        notetypes = self.get_notetypes_by_obj(paper)
-        for notetype in notetypes:
-            self.print_indented(notetype, 2)
+        # notetypes = self.get_notetypes_by_obj(paper)
+        # for notetype in notetypes:
+        #     self.print_indented(notetype, 2)
         print("")
 
     def get_notetypes_by_obj(self, target_obj):
-        all_notes = self.db.get_all_notes_by_obj(target_obj)
-        return list({note.notetype for note in all_notes})
+        # all_notes = self.db.get_all_notes_by_obj(target_obj)
+        if self.current_paper is None:
+            print("")
+            print("Please select a paper first.")
+            print("")
+            return
+        all_notes = self.db.get_notes(self.current_paper)
+        return list({note.notetype for note in all_notes if note.ref_id == target_obj.id})
+
+    def get_notes_by_obj(self, target_obj):
+        if self.current_paper is None:
+            print("")
+            print("Please select a paper first.")
+            print("")
+            return
+        all_notes = self.db.get_notes(self.current_paper)
+        return [note for note in all_notes if note.ref_id == target_obj.id]
 
     def do_add_note(self, line):
         print("")
@@ -133,15 +148,10 @@ class LitreviewShell(cmd2.Cmd):
             notetype_index += 1
 
         notetype_index = input(notetype_string)
-        if int(notetype_index) < 0 or int(notetype_index) >= len(Note.valid_notetypes):
-            notetype_selected = false
-            while input("That notetype does not exist. Try again? Y/n").lower() == u'y':
-                notetype_index = 0
+        while not(notetype_index.isnumeric() and int(notetype_index) >= 0 and int(notetype_index) < len(Note.valid_notetypes)):
+            if input("That notetype does not exist. Try again? Y/n").lower() == u'y':
                 notetype_index = input(notetype_string)
-                if int(notetype_index) > 0 and int(notetype_index) < len(Note.valid_notetypes):
-                    notetype_selected = true
-                    break
-            if notetype_selected == false:
+            else:
                 print("Canceling add note.")
                 print("")
                 return
@@ -156,13 +166,13 @@ class LitreviewShell(cmd2.Cmd):
             note_dict[u'page'] = page
 
         note = Note(**note_dict)
-        self.db.add_note(note)
+        self.db.add_note(note, self.current_paper)
         self.notes_at_current_level = self.get_notes_at_current_level(target_obj)
 
     def do_show_notes(self, line):
         print("")
         if self.current_paper == None:
-            print("Please select a paper first.")
+            print("Please a paper first.")
             print("")
             return
 
@@ -204,17 +214,23 @@ class LitreviewShell(cmd2.Cmd):
         self.do_show_notes("")
 
     def get_notes_at_current_level(self, target_obj):
-        notes = []
-        for note in self.db.get_all_notes_by_obj(target_obj):
-            notes.append(note)
+        if self.current_paper is None:
+            print("")
+            print("Please select a paper first.")
+            print("")
+            return
+        all_notes = self.db.get_notes(self.current_paper)
+        notes_at_current_level = []
+        for note in all_notes:
+            if note.ref_id == target_obj.id:
+                notes_at_current_level.append(note)
         self.note_index_at_current_level = 0
-        return notes
+        return notes_at_current_level
 
     def show_note_info(self, current_note, indentation_multiplier=1):
         self.print_indented("Notetype: {0}".format(current_note.notetype), indentation_multiplier)
         self.print_indented("Body: {0}".format(current_note.body), indentation_multiplier)
         self.print_indented("Attached notetypes:", indentation_multiplier)
-        # notetypes = self.db.get_notetypes_by_obj(current_note)
         notetypes = self.get_notetypes_by_obj(current_note)
         for notetype in notetypes:
             self.print_indented(notetype, indentation_multiplier + 1)
@@ -238,7 +254,6 @@ class LitreviewShell(cmd2.Cmd):
         self.print_indented("Notetype: {0}".format(cn.notetype))
         self.print_indented("Body: {0}".format(cn.body))
         self.print_indented("Attached notetypes:")
-        # notetypes = self.db.get_notetypes_by_obj(cn)
         notetypes = self.get_notetypes_by_obj(cn)
         for notetype in notetypes:
             self.print_indented(notetype, 2)
@@ -260,7 +275,6 @@ class LitreviewShell(cmd2.Cmd):
         self.print_indented("Notetype: {0}".format(note.notetype))
         self.print_indented("Body: {0}".format(note.body))
         self.print_indented("Attached notetypes:")
-        # notetypes = self.db.get_notetypes_by_obj(note)
         notetypes = self.get_notetypes_by_obj(note)
         for notetype in notetypes:
             self.print_indented(notetype, 2)
@@ -270,8 +284,19 @@ class LitreviewShell(cmd2.Cmd):
     def do_show_note_tree(self, line):
         depth = 1
         root_node = self.current_paper
+        if root_node is None:
+            print("")
+            print("No paper selected.")
+            print("")
+            return
+        if self.current_paper.id is None:
+            print("")
+            print("Currently selected paper has no id.")
+            print("")
+            return
 
-        note_list = self.db.get_all_notes_by_obj(self.current_paper)
+        # note_list = self.db.get_all_notes_by_obj(self.current_paper)
+        note_list = self.get_notes_by_obj(self.current_paper)
         if note_list == []:
             print("")
             print("No notes to show.")
@@ -287,7 +312,7 @@ class LitreviewShell(cmd2.Cmd):
         print("")
         self.print_indented("[Note {0}:]".format(note_index), depth)
         self.show_note_info(current_note, depth)
-        note_list = self.db.get_all_notes_by_obj(current_note)
+        note_list = self.get_notes_by_obj(current_note)
         if note_list == []:
             return
         else:

@@ -83,7 +83,7 @@ class Note():
         source = ref.to_dict()
         note = Note(source[u'ref_id'], source[u'notetype'], source[u'body'], ref.id)
         if u'page' in source:
-            note.page = page
+            note.page = source[u'page']
         return note
 
     def to_dict(self):
