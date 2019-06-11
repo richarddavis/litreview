@@ -116,11 +116,11 @@ class DatabasePaperMixin():
         paper_ref = self._get_paper(paper)
         if paper_ref is None:
             return False
-        note_refs = paper_ref.collection(u'notes').get()
+        note_snapshots = paper_ref.collection(u'notes').get()
         success = False
-        for note_ref in note_refs:
-            if note_ref.to_dict()[u'id'] == note.id:
-                note_ref.delete()
+        for note_snapshot in note_snapshots:
+            if note_snapshot.id == note.id:
+                note_snapshot.reference.delete()
                 success = True
                 break
         if success == False:
@@ -128,9 +128,10 @@ class DatabasePaperMixin():
 
         # Find any notes that referred to the note that was deleted and
         # reattach their reference to the paper.
-        for note_ref in note_refs:
-            if note_ref.to_dict()[u'ref_id'] == note.id:
-                note_ref.update({u'ref_id':paper_ref.id})
+        note_snapshots = paper_ref.collection(u'notes').get()
+        for note_snapshot in note_snapshots:
+            if note_snapshot.to_dict()[u'ref_id'] == note.id:
+                note_snapshot.reference.update({u'ref_id':paper_ref.id})
         return success
 
 class DatabaseAuthorMixin():

@@ -65,7 +65,7 @@ class LitreviewShell(cmd2.Cmd):
             while input('Add author? Y/n: ').lower() == u'y':
                 lastname = input('Author Last Name: ')
                 firstname = input('Author First Name: ')
-                paper_dict[u'authors'].append({u'lastname':lastname, u'firstname':firstname, u'paper_count':u'0'})
+                paper_dict[u'authors'].append({u'lastname':lastname, u'firstname':firstname})
                 print("")
         except EOFError:
             return
@@ -365,11 +365,22 @@ class LitreviewShell(cmd2.Cmd):
         print("")
         if line == "" and self.get_current_note() is not None:
             current_note = self.get_current_note()
-            self.print_indented("Selected note: {0}".format(current_note.title))
+            self.print_indented("Selected note: {0}".format(current_note.body))
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_note(self.current_paper, current_note)
+                    note_to_delete = current_note
+                    deleted = self.db.delete_note(note_to_delete, self.current_paper)
                     if deleted == True:
+                        try:
+                            self.note_history.remove(note_to_delete)
+                        except ValueError:
+                            pass
+
+                        if self.note_history == []:
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+                        else:
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+
                         print("")
                         print ("Note deleted.")
                         print("")
@@ -388,7 +399,7 @@ class LitreviewShell(cmd2.Cmd):
                 print("")
                 note_index = 0
                 for note in self.notes_at_current_level:
-                    self.print_indented("[{0}]: {1}".format(note_index, note.title))
+                    self.print_indented("[{0}]: {1}".format(note_index, note.body))
                     note_index += 1
                     print("")
                 try:
@@ -396,20 +407,34 @@ class LitreviewShell(cmd2.Cmd):
                 except EOFError:
                     return
 
-            self.print_indented("Selected note: {0}".format(self.notes_at_current_level[int(line)].title))
+            self.print_indented("Selected note: {0}".format(self.notes_at_current_level[int(line)].body))
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_note(self.current_paper, self.notes_at_current_level[int(line)])
+                    note_to_delete = self.notes_at_current_level[int(line)]
+                    deleted = self.db.delete_note(note_to_delete, self.current_paper)
                     if deleted == True:
+
+                        try:
+                            self.note_history.remove(note_to_delete)
+                        except ValueError:
+                            pass
+
+                        if self.note_history == []:
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+                        else:
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+
                         print("")
                         print("Note deleted.")
                         print("")
                         return
                     else:
-                        print("")
-                        print("Cancelled note deletion.")
-                        print("")
-                        return
+                        print("Error: Note not deleted.")
+                else:
+                    print("")
+                    print("Cancelled note deletion.")
+                    print("")
+                    return
             except EOFError:
                 return
 
