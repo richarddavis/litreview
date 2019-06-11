@@ -104,7 +104,7 @@ class Note():
     valid_notetypes = ["notes", "selections", "ideas", \
                        "todos", "measures", "designs", \
                        "procedures", "results", "summaries",
-                       "challenges", "RQs", "theories"]
+                       "challenges", "RQs", "theories", "hypotheses"]
 
     def __init__(self, ref_id, notetype, body, id=None, page=None):
         self.ref_id = ref_id
