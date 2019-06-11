@@ -88,6 +88,12 @@ class DatabasePaperMixin():
             citing_papers = [str(citing_paper_ref.id)]
             cited_paper_ref.update({u'cited_by':citing_papers})
 
+    def delete_citation(self):
+        # When a paper is deleted any citations that point to that paper should
+        # also be deleted. However, the program doesn't display these dangling
+        # references to the user, so for now I'm not worrying about it.
+        pass
+
     def add_note(self, note, paper):
         paper_ref = self._get_paper(paper)
         if paper_ref is None:
@@ -111,12 +117,21 @@ class DatabasePaperMixin():
         if paper_ref is None:
             return False
         note_refs = paper_ref.collection(u'notes').get()
+        success = False
         for note_ref in note_refs:
             if note_ref.to_dict()[u'id'] == note.id:
                 note_ref.delete()
-                return True
-            else:
-                return False
+                success = True
+                break
+        if success == False:
+            return success
+
+        # Find any notes that referred to the note that was deleted and
+        # reattach their reference to the paper.
+        for note_ref in note_refs:
+            if note_ref.to_dict()[u'ref_id'] == note.id:
+                note_ref.update({u'ref_id':paper_ref.id})
+        return success
 
 class DatabaseAuthorMixin():
     def __init__(self):

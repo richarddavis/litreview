@@ -14,7 +14,7 @@ class LitreviewShell(cmd2.Cmd):
 
         self.INDENT = 5
         self.intro = u'\nWelcome to the Literature Review Shell. Type help or ? to list commands.\n'
-        self.prompt = u'(litr) '
+        self.prompt = u'(lr) '
         self.db = Database()
         self.current_paper = None
         self.notes_at_current_level = []
@@ -24,7 +24,7 @@ class LitreviewShell(cmd2.Cmd):
         self.all_papers = self.db.get_papers()
 
     def reset(self):
-        self.prompt = u'(litr) '
+        self.prompt = u'(lr) '
         self.current_paper = None
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
@@ -34,7 +34,7 @@ class LitreviewShell(cmd2.Cmd):
         if self.current_paper is None:
             return
         truncated_title = self.current_paper.title[:40]
-        self.prompt = u'(litr: ' + truncated_title + u'...) '
+        self.prompt = u'(lr: ' + truncated_title + u'...) '
 
     def reload_papers(self):
         self.all_papers = self.db.get_papers()
@@ -145,10 +145,10 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
 
-    def do_show_papers(self, line):
+    def do_papers(self, line):
         paper_index = 0
         for paper in self.all_papers:
-            self.do_show_paper_info(str(paper_index))
+            self.do_paper_info(str(paper_index))
             paper_index += 1
 
     def do_select_paper(self, line):
@@ -168,9 +168,9 @@ class LitreviewShell(cmd2.Cmd):
         self.current_paper = self.all_papers[int(line)]
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
-        self.do_show_note_tree("")
+        self.do_note_tree("")
 
-    def do_show_paper_info(self, line):
+    def do_paper_info(self, line):
         print("")
         paper = None
         if line != "" and line.isnumeric():
@@ -197,7 +197,7 @@ class LitreviewShell(cmd2.Cmd):
         self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(paper))))
         print("")
 
-    def do_add_citation_link(self, line):
+    def do_add_cite(self, line):
         print("")
         line = ""
         paper_index = 0
@@ -228,7 +228,7 @@ class LitreviewShell(cmd2.Cmd):
 
         self.db.add_citation(citing_paper, cited_paper)
 
-    def do_citations(self, line):
+    def do_cites(self, line):
         if self.current_paper is None:
             print("")
             print("Please select a paper first.")
@@ -260,7 +260,10 @@ class LitreviewShell(cmd2.Cmd):
                 master_index += 1
             current_index += 1
 
-        line = input('Jump to paper: ')
+        try:
+            line = input('Jump to paper: ')
+        except EOFError:
+            return
 
         if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
             return
@@ -270,9 +273,9 @@ class LitreviewShell(cmd2.Cmd):
         self.current_paper = self.all_papers[index_map[int(line)]]
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
-        self.do_show_note_tree("")
+        self.do_note_tree("")
 
-    def do_pop_citation(self, line):
+    def do_pop_cite(self, line):
         if self.cite_history == []:
             print("")
             print("Already at beginning.")
@@ -282,7 +285,7 @@ class LitreviewShell(cmd2.Cmd):
         self.current_paper = self.cite_history.pop()
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
-        self.do_show_note_tree("")
+        self.do_note_tree("")
 
     def get_notetypes_by_obj(self, target_obj):
         if self.current_paper is None:
@@ -361,7 +364,6 @@ class LitreviewShell(cmd2.Cmd):
     def do_delete_note(self, line):
         print("")
         if line == "" and self.get_current_note() is not None:
-            # Delete self.get_current_note()
             current_note = self.get_current_note()
             self.print_indented("Selected note: {0}".format(current_note.title))
             try:
@@ -411,7 +413,7 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
 
-    def do_show_notes(self, line):
+    def do_notes(self, line):
         print("")
         if self.current_paper == None:
             print("Please select a paper first.")
@@ -426,13 +428,13 @@ class LitreviewShell(cmd2.Cmd):
         note_index = 0
         for note in self.notes_at_current_level:
             self.print_indented("[Note {0}:]".format(note_index))
-            self.show_note_info(note)
+            self.note_info(note)
             note_index += 1
             print("")
 
     def do_select_note(self, line):
         while not (line != "" and line.isnumeric() and int(line) < len(self.notes_at_current_level) and int(line) >= 0):
-            self.do_show_notes("")
+            self.do_notes("")
             try:
                 line = input('Please select a note: ')
             except EOFError:
@@ -440,7 +442,7 @@ class LitreviewShell(cmd2.Cmd):
 
         self.note_history.append(self.notes_at_current_level[int(line)])
         self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
-        self.do_show_notes("")
+        self.do_notes("")
 
     def do_pop_note(self, line):
         if self.note_history == []:
@@ -456,7 +458,7 @@ class LitreviewShell(cmd2.Cmd):
         else:
             self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
 
-        self.do_show_notes("")
+        self.do_notes("")
 
     def get_notes_at_current_level(self, target_obj):
         if self.current_paper is None:
@@ -472,7 +474,7 @@ class LitreviewShell(cmd2.Cmd):
         self.note_index_at_current_level = 0
         return notes_at_current_level
 
-    def show_note_info(self, current_note, indentation_multiplier=1):
+    def note_info(self, current_note, indentation_multiplier=1):
         if current_note is None:
             print("")
             print("No current note.")
@@ -485,7 +487,7 @@ class LitreviewShell(cmd2.Cmd):
         for notetype in notetypes:
             self.print_indented(notetype, indentation_multiplier + 1)
 
-    def do_show_note_info(self, line):
+    def do_note_info(self, line):
         print("")
         cn = None
         if self.notes_at_current_level == []:
@@ -493,6 +495,10 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
         elif line == "":
+            if self.get_current_note() is None:
+                print("No current note.")
+                print("")
+                return
             cn = self.get_current_note()
         elif int(line) >= len(self.notes_at_current_level) or int(line) < 0:
             print("That note does not exist.")
@@ -531,7 +537,7 @@ class LitreviewShell(cmd2.Cmd):
         self.note_index_at_current_level += 1
         print("")
 
-    def do_show_note_tree(self, line):
+    def do_note_tree(self, line):
         depth = 1
         root_node = self.current_paper
         if root_node is None:
@@ -554,21 +560,21 @@ class LitreviewShell(cmd2.Cmd):
             return
         note_index = 0
         for note in note_list:
-            self.show_note_tree_helper(note, depth, note_index)
+            self.note_tree_helper(note, depth, note_index)
             note_index += 1
             print("")
 
-    def show_note_tree_helper(self, current_note, depth, note_index):
+    def note_tree_helper(self, current_note, depth, note_index):
         print("")
         self.print_indented("[Note {0}:]".format(note_index), depth)
-        self.show_note_info(current_note, depth)
+        self.note_info(current_note, depth)
         note_list = self.get_notes_by_obj(current_note)
         if note_list == []:
             return
         else:
             child_note_index = 0
             for note in note_list:
-                self.show_note_tree_helper(note, depth+1, child_note_index)
+                self.note_tree_helper(note, depth+1, child_note_index)
                 child_note_index += 1
 
     def do_EOF(self, line):
