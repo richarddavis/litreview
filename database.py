@@ -71,34 +71,68 @@ class DatabaseDocMixin():
         doc_ref.delete()
         return True
 
-    def add_link(self, citing_doc, cited_doc):
-        citing_doc_ref = self._get_doc(citing_doc)
-        cited_doc_ref = self._get_doc(cited_doc)
+    def add_link(self, out_doc, in_doc):
+        # out_doc -> in_doc
 
-        if citing_doc_ref is None or cited_doc_ref is None:
+        # out_doc.out_refs is updated with in_doc.ref
+        # in_doc.in_refs is updated with out_doc.ref
+
+        out_ref = self._get_doc(out_doc)
+        in_ref = self._get_doc(in_doc)
+
+        if out_ref is None or in_ref is None:
             print("No doc selected. Quitting.")
             return
-        try:
-            citing_docs_out_links = citing_doc_ref.get().get(u'citing')
-            citing_docs_out_links.append(str(cited_doc_ref.id))
-            citing_doc_ref.update({u'citing':citing_docs_out_links})
-        except KeyError:
-            cited_docs = [str(cited_doc_ref.id)]
-            citing_doc_ref.update({u'citing':cited_docs})
 
+        # Update out_doc.out_refs with in_doc.ref
         try:
-            cited_docs_in_links = cited_doc_ref.get().get(u'cited_by')
-            cited_docs_in_links.append(str(citing_doc_ref.id))
-            cited_doc_ref.update({u'cited_by':cited_docs_in_links})
+            out_refs = out_ref.get().get(u'outlinks')
+            out_refs.append(str(in_ref.id))
+            out_ref.update({u'outlinks':out_refs})
         except KeyError:
-            citing_docs = [str(citing_doc_ref.id)]
-            cited_doc_ref.update({u'cited_by':citing_docs})
+            out_refs = [str(in_ref.id)]
+            out_ref.update({u'outlinks':out_refs})
 
-    def delete_link(self):
+        # Update in_doc.in_refs with out_doc.ref
+        try:
+            in_refs = in_ref.get().get(u'inlinks')
+            in_refs.append(str(out_ref.id))
+            in_ref.update({u'inlinks':in_refs})
+        except KeyError:
+            in_refs = [str(out_ref.id)]
+            in_ref.update({u'inlinks':in_refs})
+
+    def delete_link(self, out_doc, in_doc):
         # When a doc is deleted any links that point to that doc should
-        # also be deleted. However, the program doesn't display these dangling
+        # also be removed. However, the program doesn't display these dangling
         # references to the user, so for now I'm not worrying about it.
-        pass
+
+        out_ref = self._get_doc(out_doc)
+        in_ref = self._get_doc(in_doc)
+
+        if out_ref is None or in_ref is None:
+            print("No doc selected. Quitting.")
+            return
+
+        # Update out_doc.out_refs with in_doc.ref
+        try:
+            out_refs = out_ref.get().get(u'outlinks')
+            print(out_refs)
+            print(str(in_ref.id))
+            out_refs.remove(str(in_ref.id))
+            out_ref.update({u'outlinks':out_refs})
+            return True
+        except KeyError:
+            return False
+
+        # Update in_doc.in_refs with out_doc.ref
+        try:
+            in_refs = in_ref.get().get(u'inlinks')
+            in_refs.remove(str(out_ref.id))
+            in_ref.update({u'inlinks':in_refs})
+            return True
+        except KeyError:
+            return False
 
     def add_note(self, note, doc):
         doc_ref = self._get_doc(doc)

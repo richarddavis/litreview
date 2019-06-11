@@ -1,6 +1,6 @@
 class Doc():
     valid_doctypes = ["papers", "notebooks"]
-    def __init__(self, doctype="docs", title=None, authors=None, year=None, doi=None, cited_by=[], citing=[], id=None):
+    def __init__(self, doctype="docs", title=None, authors=None, year=None, doi=None, inlinks=[], outlinks=[], id=None):
         self.doctype = doctype
         self.title = title
         self.authors = authors
@@ -10,8 +10,8 @@ class Doc():
         self.doi = doi
         if self.doi is not None:
             self.doi = doi.lower()
-        self.cited_by = cited_by
-        self.citing = citing
+        self.inlinks = inlinks
+        self.outlinks = outlinks
         self.id = id
 
     @staticmethod
@@ -28,11 +28,11 @@ class Doc():
         if u'doi' in source:
             doc.doi = source[u'doi']
 
-        if u'cited_by' in source:
-            doc.cited_by = source[u'cited_by']
+        if u'inlinks' in source:
+            doc.inlinks = source[u'inlinks']
 
-        if u'citing' in source:
-            doc.citing = source[u'citing']
+        if u'outlinks' in source:
+            doc.outlinks = source[u'outlinks']
 
         return doc
 
@@ -49,11 +49,11 @@ class Doc():
         if self.doi is not None:
             doc[u'doi'] = self.doi
 
-        if self.cited_by is not None:
-            doc[u'cited_by'] = self.cited_by
+        if self.inlinks is not None:
+            doc[u'inlinks'] = self.inlinks
 
-        if self.citing is not None:
-            doc[u'citing'] = self.citing
+        if self.outlinks is not None:
+            doc[u'outlinks'] = self.outlinks
 
         if self.id is not None:
             doc[u'id'] = self.id

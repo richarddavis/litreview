@@ -17,15 +17,17 @@ class LitreviewShell(cmd2.Cmd):
         self.prompt = u'(lr) '
         self.db = Database()
         self.current_doc = None
+        self.current_doc_index = None
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
         self.note_history = []
-        self.cite_history = []
+        self.link_history = []
         self.all_docs = self.db.get_docs()
 
     def reset(self):
         self.prompt = u'(lr) '
         self.current_doc = None
+        self.current_doc_index = None
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
         self.note_history = []
@@ -38,6 +40,19 @@ class LitreviewShell(cmd2.Cmd):
 
     def reload_docs(self):
         self.all_docs = self.db.get_docs()
+
+    def set_current_doc(self, *args):
+        if not args:
+            doc_index = self.current_doc_index
+        else:
+            doc_index = args[0]
+
+        if doc_index is None:
+            return
+
+        if doc_index >= 0 and doc_index < len(self.all_docs):
+            self.current_doc_index = doc_index
+            self.current_doc = self.all_docs[self.current_doc_index]
 
     def print_indented(self, formatted_text, indentation_multiplier = 1):
         print(textwrap.fill(formatted_text,
@@ -187,7 +202,7 @@ class LitreviewShell(cmd2.Cmd):
                 return
 
         self.reset()
-        self.current_doc = self.all_docs[int(line)]
+        self.set_current_doc(int(line))
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
@@ -219,63 +234,101 @@ class LitreviewShell(cmd2.Cmd):
         self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(doc))))
         print("")
 
-    def do_add_cite(self, line):
-        print("")
-        line = ""
-        doc_index = 0
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
-            for doc in self.all_docs:
-                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
-                doc_index += 1
-                print("")
-            try:
-                line = input('Please select the CITING doc: ')
-            except EOFError:
-                return
-        citing_doc = self.all_docs[int(line)]
-
-        print("")
-        line = ""
-        doc_index = 0
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
-            for doc in self.all_docs:
-                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
-                doc_index += 1
-                print("")
-            try:
-                line = input('Please select the CITED doc: ')
-            except EOFError:
-                return
-        cited_doc = self.all_docs[int(line)]
-
-        self.db.add_citation(citing_doc, cited_doc)
-
-    def do_cites(self, line):
+    def do_add_link(self, line):
         if self.current_doc is None:
             print("")
             print("Please select a doc first.")
             print("")
             return
-        citing = self.current_doc.citing
-        self.print_indented("Citing:")
+
+        print("")
+        line = ""
+        doc_index = 0
+        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
+            for doc in self.all_docs:
+                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                doc_index += 1
+                print("")
+            try:
+                line = input('Please select the doc to link to: ')
+            except EOFError:
+                return
+        in_doc = self.all_docs[int(line)]
+
+        self.db.add_link(self.current_doc, in_doc)
+        self.reload_docs()
+        self.set_current_doc()
+
+    def do_delete_link(self, line):
+        if self.current_doc is None:
+            print("")
+            print("Please select a doc first.")
+            print("")
+            return
+
+        outlinks = self.current_doc.outlinks
+        self.print_indented("Outlinks:")
         index_map = {}
         current_index = 0
-        for citing_doc_id in citing:
+        for outlinks_doc_id in outlinks:
             master_index = 0
             for doc in self.all_docs:
-                if citing_doc_id == doc.id:
+                if outlinks_doc_id == doc.id:
                     self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
                     index_map[current_index] = master_index
                     print("")
                 master_index += 1
             current_index += 1
 
-        cited_by = self.current_doc.cited_by
-        self.print_indented("Cited by:")
-        for cited_by_id in cited_by:
+        try:
+            line = input('Select link to delete: ')
+        except EOFError:
+            return
+
+        if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
+            return
+
+        deleted = self.db.delete_link(self.current_doc, self.all_docs[index_map[int(line)]])
+        if deleted == True:
+            self.reload_docs()
+            self.set_current_doc()
+            print("")
+            print("Link deleted.")
+            print("")
+            return
+        else:
+            print("")
+            print("Error: Link not deleted.")
+            print("")
+            return
+
+    def do_links(self, line):
+        if self.current_doc is None:
+            print("")
+            print("Please select a doc first.")
+            print("")
+            return
+
+        outlinks = self.current_doc.outlinks
+        self.print_indented("Outlinks:")
+        index_map = {}
+        current_index = 0
+        for outlinks_doc_id in outlinks:
             master_index = 0
             for doc in self.all_docs:
-                if cited_by_id == doc.id:
+                if outlinks_doc_id == doc.id:
+                    self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
+                    index_map[current_index] = master_index
+                    print("")
+                master_index += 1
+            current_index += 1
+
+        inlinks = self.current_doc.inlinks
+        self.print_indented("Inlinks:")
+        for inlinks_id in inlinks:
+            master_index = 0
+            for doc in self.all_docs:
+                if inlinks_id == doc.id:
                     self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
                     index_map[current_index] = master_index
                     print("")
@@ -290,21 +343,21 @@ class LitreviewShell(cmd2.Cmd):
         if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
             return
 
-        self.cite_history.append(self.current_doc)
+        self.link_history.append(self.current_doc)
         self.reset()
-        self.current_doc = self.all_docs[index_map[int(line)]]
+        self.set_current_doc(index_map[int(line)])
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
 
-    def do_pop_cite(self, line):
-        if self.cite_history == []:
+    def do_pop_link(self, line):
+        if self.link_history == []:
             print("")
             print("Already at beginning.")
             print("")
             return
         self.reset()
-        self.current_doc = self.cite_history.pop()
+        self.current_doc = self.link_history.pop()
         self.update_prompt()
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
