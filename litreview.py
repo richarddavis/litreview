@@ -16,28 +16,28 @@ class LitreviewShell(cmd2.Cmd):
         self.intro = u'\nWelcome to the Literature Review Shell. Type help or ? to list commands.\n'
         self.prompt = u'(lr) '
         self.db = Database()
-        self.current_paper = None
+        self.current_doc = None
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
         self.note_history = []
         self.cite_history = []
-        self.all_papers = self.db.get_papers()
+        self.all_docs = self.db.get_docs()
 
     def reset(self):
         self.prompt = u'(lr) '
-        self.current_paper = None
+        self.current_doc = None
         self.notes_at_current_level = []
         self.note_index_at_current_level = 0
         self.note_history = []
 
     def update_prompt(self):
-        if self.current_paper is None:
+        if self.current_doc is None:
             return
-        truncated_title = self.current_paper.title[:40]
+        truncated_title = self.current_doc.title[:40]
         self.prompt = u'(lr: ' + truncated_title + u'...) '
 
-    def reload_papers(self):
-        self.all_papers = self.db.get_papers()
+    def reload_docs(self):
+        self.all_docs = self.db.get_docs()
 
     def print_indented(self, formatted_text, indentation_multiplier = 1):
         print(textwrap.fill(formatted_text,
@@ -51,21 +51,43 @@ class LitreviewShell(cmd2.Cmd):
         else:
             return self.note_history[-1]
 
-    def do_add_paper(self, line):
+    def do_add_doc(self, line):
         print("")
-        paper_dict = {}
+        doc_dict = {}
+
+        doctype_string = u'Select Doctype: \n'
+        doctype_index = 0
+        for doctype in Doc.valid_doctypes:
+            doctype_string += u'    {0}: {1}\n'.format(doctype_index, doctype)
+            doctype_index += 1
+
         try:
-            paper_dict[u'title'] = input('Paper title: ')
+            doctype_index = input(doctype_string)
+        except EOFError:
+            return
+        while not(doctype_index.isnumeric() and int(doctype_index) >= 0 and int(doctype_index) < len(Doc.valid_doctypes)):
+            try:
+                if input("That doctype does not exist. Try again? Y/n: ").lower() == u'y':
+                    doctype_index = input(doctype_string)
+                else:
+                    print("Canceling add doc.")
+                    print("")
+                    return
+            except EOFError:
+                return
+
+        try:
+            doc_dict[u'title'] = input('Doc title: ')
         except EOFError:
             return
 
         print("")
-        paper_dict[u'authors'] = []
+        doc_dict[u'authors'] = []
         try:
             while input('Add author? Y/n: ').lower() == u'y':
                 lastname = input('Author Last Name: ')
                 firstname = input('Author First Name: ')
-                paper_dict[u'authors'].append({u'lastname':lastname, u'firstname':firstname})
+                doc_dict[u'authors'].append({u'lastname':lastname, u'firstname':firstname})
                 print("")
         except EOFError:
             return
@@ -76,7 +98,7 @@ class LitreviewShell(cmd2.Cmd):
         except EOFError:
             return
         if year is not None:
-            paper_dict[u'year'] = year
+            doc_dict[u'year'] = year
             print("")
 
         try:
@@ -84,195 +106,195 @@ class LitreviewShell(cmd2.Cmd):
         except EOFError:
             return
         if doi is not "":
-            paper_dict[u'doi'] = doi
+            doc_dict[u'doi'] = doi
             print("")
 
-        paper = Paper(**paper_dict)
-        self.db.add_paper(paper)
-        self.all_papers = self.db.get_papers()
+        doc = Doc(**doc_dict)
+        self.db.add_doc(doc)
+        self.all_docs = self.db.get_docs()
 
-    def do_delete_paper(self, line):
+    def do_delete_doc(self, line):
         print("")
-        if line == "" and self.current_paper is not None:
-            # Delete self.current_paper
-            self.print_indented("Selected paper: {0}".format(self.current_paper.title))
+        if line == "" and self.current_doc is not None:
+            # Delete self.current_doc
+            self.print_indented("Selected doc: {0}".format(self.current_doc.title))
             try:
-                if input("Delete this paper? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_paper(self.current_paper)
+                if input("Delete this doc? Y/n: ").lower() == u'y':
+                    deleted = self.db.delete_doc(self.current_doc)
                     if deleted == True:
                         self.reset()
-                        self.reload_papers()
+                        self.reload_docs()
                         print("")
-                        print("Paper deleted.")
+                        print("Doc deleted.")
                         print("")
                         return
                     else:
                         print("")
-                        print("Error: Paper not deleted.")
+                        print("Error: Doc not deleted.")
                         print("")
                         return
             except EOFError:
                 return
         else:
-            while not (line != "" and line.isnumeric() and int(line) < len(self.all_papers) and int(line) >= 0):
+            while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
                 print("")
-                paper_index = 0
-                for paper in self.all_papers:
-                    self.print_indented("[{0}]: {1}".format(paper_index, paper.title))
-                    paper_index += 1
+                doc_index = 0
+                for doc in self.all_docs:
+                    self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                    doc_index += 1
                     print("")
                 try:
-                    line = input('Please select a paper: ')
+                    line = input('Please select a doc: ')
                 except EOFError:
                     return
 
-            self.print_indented("Selected paper: {0}".format(self.all_papers[int(line)].title))
+            self.print_indented("Selected doc: {0}".format(self.all_docs[int(line)].title))
             try:
-                if input("Delete this paper? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_paper(self.all_papers[int(line)])
+                if input("Delete this doc? Y/n: ").lower() == u'y':
+                    deleted = self.db.delete_doc(self.all_docs[int(line)])
                     if deleted == True:
                         self.reset()
-                        self.reload_papers()
+                        self.reload_docs()
                         print("")
-                        print("Paper deleted.")
+                        print("Doc deleted.")
                         print("")
                         return
                     else:
                         print("")
-                        print("Paper deletion canceled.")
+                        print("Doc deletion canceled.")
                         print("")
                         return
             except EOFError:
                 return
 
-    def do_papers(self, line):
-        paper_index = 0
-        for paper in self.all_papers:
-            self.do_paper_info(str(paper_index))
-            paper_index += 1
+    def do_docs(self, line):
+        doc_index = 0
+        for doc in self.all_docs:
+            self.do_doc_info(str(doc_index))
+            doc_index += 1
 
-    def do_select_paper(self, line):
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_papers) and int(line) >= 0):
+    def do_select_doc(self, line):
+        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
             print("")
-            paper_index = 0
-            for paper in self.all_papers:
-                self.print_indented("[{0}]: {1}".format(paper_index, paper.title))
-                paper_index += 1
+            doc_index = 0
+            for doc in self.all_docs:
+                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                doc_index += 1
                 print("")
             try:
-                line = input('Please select a paper: ')
+                line = input('Please select a doc: ')
             except EOFError:
                 return
 
         self.reset()
-        self.current_paper = self.all_papers[int(line)]
+        self.current_doc = self.all_docs[int(line)]
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
 
-    def do_paper_info(self, line):
+    def do_doc_info(self, line):
         print("")
-        paper = None
+        doc = None
         if line != "" and line.isnumeric():
-            if int(line) >= len(self.all_papers) or int(line) < 0:
-                print("That paper does not exist.")
+            if int(line) >= len(self.all_docs) or int(line) < 0:
+                print("That doc does not exist.")
                 print("")
                 return
             else:
-                paper = self.all_papers[int(line)]
+                doc = self.all_docs[int(line)]
                 self.print_indented("[{}]".format(line))
         else:
-            if self.current_paper == None:
-                print("Please select a paper first.")
+            if self.current_doc == None:
+                print("Please select a doc first.")
                 print("")
                 return
             else:
-                paper = self.current_paper
-        self.print_indented("Title: {0}".format(paper.title))
+                doc = self.current_doc
+        self.print_indented("Title: {0}".format(doc.title))
         self.print_indented("Authors:")
-        for author in paper.authors:
+        for author in doc.authors:
             self.print_indented("{0}, {1}".format(author[u'lastname'], author[u'firstname']), 2)
-        self.print_indented("DOI: {0}".format(paper.doi))
-        self.print_indented("Year: {0}".format(paper.year))
-        self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(paper))))
+        self.print_indented("DOI: {0}".format(doc.doi))
+        self.print_indented("Year: {0}".format(doc.year))
+        self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(doc))))
         print("")
 
     def do_add_cite(self, line):
         print("")
         line = ""
-        paper_index = 0
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_papers) and int(line) >= 0):
-            for paper in self.all_papers:
-                self.print_indented("[{0}]: {1}".format(paper_index, paper.title))
-                paper_index += 1
+        doc_index = 0
+        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
+            for doc in self.all_docs:
+                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                doc_index += 1
                 print("")
             try:
-                line = input('Please select the CITING paper: ')
+                line = input('Please select the CITING doc: ')
             except EOFError:
                 return
-        citing_paper = self.all_papers[int(line)]
+        citing_doc = self.all_docs[int(line)]
 
         print("")
         line = ""
-        paper_index = 0
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_papers) and int(line) >= 0):
-            for paper in self.all_papers:
-                self.print_indented("[{0}]: {1}".format(paper_index, paper.title))
-                paper_index += 1
+        doc_index = 0
+        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
+            for doc in self.all_docs:
+                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                doc_index += 1
                 print("")
             try:
-                line = input('Please select the CITED paper: ')
+                line = input('Please select the CITED doc: ')
             except EOFError:
                 return
-        cited_paper = self.all_papers[int(line)]
+        cited_doc = self.all_docs[int(line)]
 
-        self.db.add_citation(citing_paper, cited_paper)
+        self.db.add_citation(citing_doc, cited_doc)
 
     def do_cites(self, line):
-        if self.current_paper is None:
+        if self.current_doc is None:
             print("")
-            print("Please select a paper first.")
+            print("Please select a doc first.")
             print("")
             return
-        citing = self.current_paper.citing
+        citing = self.current_doc.citing
         self.print_indented("Citing:")
         index_map = {}
         current_index = 0
-        for citing_paper_id in citing:
+        for citing_doc_id in citing:
             master_index = 0
-            for paper in self.all_papers:
-                if citing_paper_id == paper.id:
-                    self.print_indented("[{0}]: {1}".format(current_index, paper.title), 2)
+            for doc in self.all_docs:
+                if citing_doc_id == doc.id:
+                    self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
                     index_map[current_index] = master_index
                     print("")
                 master_index += 1
             current_index += 1
 
-        cited_by = self.current_paper.cited_by
+        cited_by = self.current_doc.cited_by
         self.print_indented("Cited by:")
         for cited_by_id in cited_by:
             master_index = 0
-            for paper in self.all_papers:
-                if cited_by_id == paper.id:
-                    self.print_indented("[{0}]: {1}".format(current_index, paper.title), 2)
+            for doc in self.all_docs:
+                if cited_by_id == doc.id:
+                    self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
                     index_map[current_index] = master_index
                     print("")
                 master_index += 1
             current_index += 1
 
         try:
-            line = input('Jump to paper: ')
+            line = input('Jump to doc: ')
         except EOFError:
             return
 
         if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
             return
 
-        self.cite_history.append(self.current_paper)
+        self.cite_history.append(self.current_doc)
         self.reset()
-        self.current_paper = self.all_papers[index_map[int(line)]]
+        self.current_doc = self.all_docs[index_map[int(line)]]
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
 
     def do_pop_cite(self, line):
@@ -282,40 +304,40 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
         self.reset()
-        self.current_paper = self.cite_history.pop()
+        self.current_doc = self.cite_history.pop()
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
 
     def get_notetypes_by_obj(self, target_obj):
-        if self.current_paper is None:
+        if self.current_doc is None:
             print("")
-            print("Please select a paper first.")
+            print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_paper)
+        all_notes = self.db.get_notes(self.current_doc)
         return list({note.notetype for note in all_notes if note.ref_id == target_obj.id})
 
     def get_notes_by_obj(self, target_obj):
-        if self.current_paper is None:
+        if self.current_doc is None:
             print("")
-            print("Please select a paper first.")
+            print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_paper)
+        all_notes = self.db.get_notes(self.current_doc)
         return [note for note in all_notes if note.ref_id == target_obj.id]
 
     def do_add_note(self, line):
         print("")
         note_dict = {}
-        if self.current_paper == None:
-            print("Pleast select a paper first.")
+        if self.current_doc == None:
+            print("Pleast select a doc first.")
             print("")
             return
 
         target_obj = None
         if self.note_history == []:
-            target_obj = self.current_paper
+            target_obj = self.current_doc
         else:
             target_obj = self.note_history[-1]
 
@@ -358,7 +380,7 @@ class LitreviewShell(cmd2.Cmd):
             note_dict[u'page'] = page
 
         note = Note(**note_dict)
-        self.db.add_note(note, self.current_paper)
+        self.db.add_note(note, self.current_doc)
         self.notes_at_current_level = self.get_notes_at_current_level(target_obj)
 
     def do_delete_note(self, line):
@@ -369,7 +391,7 @@ class LitreviewShell(cmd2.Cmd):
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
                     note_to_delete = current_note
-                    deleted = self.db.delete_note(note_to_delete, self.current_paper)
+                    deleted = self.db.delete_note(note_to_delete, self.current_doc)
                     if deleted == True:
                         try:
                             self.note_history.remove(note_to_delete)
@@ -377,7 +399,7 @@ class LitreviewShell(cmd2.Cmd):
                             pass
 
                         if self.note_history == []:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
                         else:
                             self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
 
@@ -411,7 +433,7 @@ class LitreviewShell(cmd2.Cmd):
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
                     note_to_delete = self.notes_at_current_level[int(line)]
-                    deleted = self.db.delete_note(note_to_delete, self.current_paper)
+                    deleted = self.db.delete_note(note_to_delete, self.current_doc)
                     if deleted == True:
 
                         try:
@@ -420,7 +442,7 @@ class LitreviewShell(cmd2.Cmd):
                             pass
 
                         if self.note_history == []:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
                         else:
                             self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
 
@@ -440,8 +462,8 @@ class LitreviewShell(cmd2.Cmd):
 
     def do_notes(self, line):
         print("")
-        if self.current_paper == None:
-            print("Please select a paper first.")
+        if self.current_doc == None:
+            print("Please select a doc first.")
             print("")
             return
 
@@ -479,19 +501,19 @@ class LitreviewShell(cmd2.Cmd):
         self.note_history.pop()
 
         if self.note_history == []:
-            self.notes_at_current_level = self.get_notes_at_current_level(self.current_paper)
+            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         else:
             self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
 
         self.do_notes("")
 
     def get_notes_at_current_level(self, target_obj):
-        if self.current_paper is None:
+        if self.current_doc is None:
             print("")
-            print("Please select a paper first.")
+            print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_paper)
+        all_notes = self.db.get_notes(self.current_doc)
         notes_at_current_level = []
         for note in all_notes:
             if note.ref_id == target_obj.id:
@@ -564,20 +586,20 @@ class LitreviewShell(cmd2.Cmd):
 
     def do_note_tree(self, line):
         depth = 1
-        root_node = self.current_paper
+        root_node = self.current_doc
         if root_node is None:
             print("")
-            print("No paper selected.")
+            print("No doc selected.")
             print("")
             return
-        if self.current_paper.id is None:
+        if self.current_doc.id is None:
             print("")
-            print("Currently selected paper has no id.")
+            print("Currently selected doc has no id.")
             print("")
             return
 
-        # note_list = self.db.get_all_notes_by_obj(self.current_paper)
-        note_list = self.get_notes_by_obj(self.current_paper)
+        # note_list = self.db.get_all_notes_by_obj(self.current_doc)
+        note_list = self.get_notes_by_obj(self.current_doc)
         if note_list == []:
             print("")
             print("No notes to show.")

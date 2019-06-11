@@ -5,118 +5,124 @@ from google.cloud.firestore_v1 import ArrayRemove, ArrayUnion
 import google.cloud.exceptions
 from document_types import *
 
-class DatabasePaperMixin():
+class DatabaseDocMixin():
     def __init__(self):
         pass
 
-    def add_paper(self, paper):
-        paper_obj = self._get_paper_by_title(paper.title)
-        if paper_obj is not None:
-            print("Paper already in database.")
+    def add_doc(self, doc):
+        doc_obj = self._get_doc_by_title(doc.title)
+        if doc_obj is not None:
+            print("Doc already in database.")
         else:
-            print("Adding paper to database.")
-            for author in paper.authors:
+            print("Adding doc to database.")
+            for author in doc.authors:
                 new_author = Author(**author)
                 self._add_author(new_author)
                 author_snapshot = self._get_author(new_author)
-                self._inc_author_paper_count(author_snapshot)
-            self._get_papers().add(paper.to_dict())
+                self._inc_author_doc_count(author_snapshot)
+            self._get_docs().add(doc.to_dict())
 
-    def _get_papers(self):
-        return self.db.collection(u'papers')
+    def _get_docs(self):
+        return self.db.collection(u'docs')
 
-    def _get_paper(self, paper):
-        # This function checks the database for a paper with the same id.
-        # If the paper hasn't been added, its ID is None.
+    def _get_doc(self, doc):
+        # This function checks the database for a doc with the same id.
+        # If the doc hasn't been added, its ID is None.
         try:
-            papers = self._get_papers()
-            p = papers.document(paper.id)
+            docs = self._get_docs()
+            p = docs.document(doc.id)
             return p
         except google.cloud.exceptions.NotFound:
             return None
 
-    def _get_paper_by_title(self, title):
-        papers = self._get_papers()
-        for p in papers.stream():
+    def _get_doc_by_title(self, title):
+        docs = self._get_docs()
+        for p in docs.stream():
             if p.to_dict()[u'title'].lower() == title.lower():
-                return Paper.from_ref(p)
+                return Doc.from_ref(p)
         return None
 
-    def get_paper(self, paper):
+    def get_doc(self, doc):
         try:
-            p = self._get_papers().document(paper.id)
-            return Paper.from_ref(p)
+            p = self._get_docs().document(doc.id)
+            return Doc.from_ref(p)
         except google.cloud.exceptions.NotFound:
             return None
 
-    def get_papers(self):
-        papers = self._get_papers()
-        return [Paper.from_ref(p) for p in papers.stream()]
+    def get_docs(self):
+        docs = self._get_docs()
+        return [Doc.from_ref(p) for p in docs.stream()]
 
-    def delete_paper(self, paper):
-        paper_ref = self._get_paper(paper)
-        if paper_ref is not None:
-            paper_ref.delete()
-            for author in paper.authors:
-                new_author = Author(**author)
-                author_snapshot = self._get_author(new_author)
-                self._dec_author_paper_count(author_snapshot)
-            return True
-        else:
+    def delete_doc(self, doc):
+        doc_ref = self._get_doc(doc)
+        if doc_ref is None:
             return False
 
-    def add_citation(self, citing_paper, cited_paper):
-        citing_paper_ref = self._get_paper(citing_paper)
-        cited_paper_ref = self._get_paper(cited_paper)
+        # Delete all attached notes
+        note_snapshots = doc_ref.collection(u'notes').get()
+        for note_snapshot in note_snapshots:
+            note_snapshot.reference.delete()
 
-        if citing_paper_ref is None or cited_paper_ref is None:
-            print("No paper selected. Quitting.")
+        for author in doc.authors:
+            new_author = Author(**author)
+            author_snapshot = self._get_author(new_author)
+            self._dec_author_doc_count(author_snapshot)
+
+        doc_ref.delete()
+        return True
+
+    def add_link(self, citing_doc, cited_doc):
+        citing_doc_ref = self._get_doc(citing_doc)
+        cited_doc_ref = self._get_doc(cited_doc)
+
+        if citing_doc_ref is None or cited_doc_ref is None:
+            print("No doc selected. Quitting.")
             return
         try:
-            citing_papers_out_citations = citing_paper_ref.get().get(u'citing')
-            citing_papers_out_citations.append(str(cited_paper_ref.id))
-            citing_paper_ref.update({u'citing':citing_papers_out_citations})
+            citing_docs_out_links = citing_doc_ref.get().get(u'citing')
+            citing_docs_out_links.append(str(cited_doc_ref.id))
+            citing_doc_ref.update({u'citing':citing_docs_out_links})
         except KeyError:
-            cited_papers = [str(cited_paper_ref.id)]
-            citing_paper_ref.update({u'citing':cited_papers})
+            cited_docs = [str(cited_doc_ref.id)]
+            citing_doc_ref.update({u'citing':cited_docs})
 
         try:
-            cited_papers_in_citations = cited_paper_ref.get().get(u'cited_by')
-            cited_papers_in_citations.append(str(citing_paper_ref.id))
-            cited_paper_ref.update({u'cited_by':cited_papers_in_citations})
+            cited_docs_in_links = cited_doc_ref.get().get(u'cited_by')
+            cited_docs_in_links.append(str(citing_doc_ref.id))
+            cited_doc_ref.update({u'cited_by':cited_docs_in_links})
         except KeyError:
-            citing_papers = [str(citing_paper_ref.id)]
-            cited_paper_ref.update({u'cited_by':citing_papers})
+            citing_docs = [str(citing_doc_ref.id)]
+            cited_doc_ref.update({u'cited_by':citing_docs})
 
-    def delete_citation(self):
-        # When a paper is deleted any citations that point to that paper should
+    def delete_link(self):
+        # When a doc is deleted any links that point to that doc should
         # also be deleted. However, the program doesn't display these dangling
         # references to the user, so for now I'm not worrying about it.
         pass
 
-    def add_note(self, note, paper):
-        paper_ref = self._get_paper(paper)
-        if paper_ref is None:
-            print("Please add current paper to database before adding notes.")
+    def add_note(self, note, doc):
+        doc_ref = self._get_doc(doc)
+        if doc_ref is None:
+            print("Please add current doc to database before adding notes.")
             return
 
-        note_refs = paper_ref.collection(u'notes')
+        note_refs = doc_ref.collection(u'notes')
         note_refs.add(note.to_dict())
 
-    def get_notes(self, paper):
-        paper_ref = self._get_paper(paper)
-        if paper_ref is None:
-            print("Please add current paper to database first.")
+    def get_notes(self, doc):
+        doc_ref = self._get_doc(doc)
+        if doc_ref is None:
+            print("Please add current doc to database first.")
             return
 
-        note_refs = paper_ref.collection(u'notes').get()
+        note_refs = doc_ref.collection(u'notes').get()
         return [Note.from_ref(note) for note in note_refs]
 
-    def delete_note(self, note, paper):
-        paper_ref = self._get_paper(paper)
-        if paper_ref is None:
+    def delete_note(self, note, doc):
+        doc_ref = self._get_doc(doc)
+        if doc_ref is None:
             return False
-        note_snapshots = paper_ref.collection(u'notes').get()
+        note_snapshots = doc_ref.collection(u'notes').get()
         success = False
         for note_snapshot in note_snapshots:
             if note_snapshot.id == note.id:
@@ -127,11 +133,11 @@ class DatabasePaperMixin():
             return success
 
         # Find any notes that referred to the note that was deleted and
-        # reattach their reference to the paper.
-        note_snapshots = paper_ref.collection(u'notes').get()
+        # reattach their reference to the doc.
+        note_snapshots = doc_ref.collection(u'notes').get()
         for note_snapshot in note_snapshots:
             if note_snapshot.to_dict()[u'ref_id'] == note.id:
-                note_snapshot.reference.update({u'ref_id':paper_ref.id})
+                note_snapshot.reference.update({u'ref_id':doc_ref.id})
         return success
 
 class DatabaseAuthorMixin():
@@ -159,18 +165,18 @@ class DatabaseAuthorMixin():
         else:
             return authors[0]
 
-    def _inc_author_paper_count(self, author_snapshot):
-        count = author_snapshot.get(u'paper_count')
+    def _inc_author_doc_count(self, author_snapshot):
+        count = author_snapshot.get(u'doc_count')
         new_count = int(count) + 1
-        author_snapshot.reference.update({u'paper_count': str(new_count)})
+        author_snapshot.reference.update({u'doc_count': str(new_count)})
 
-    def _dec_author_paper_count(self, author_snapshot):
-        count = author_snapshot.get(u'paper_count')
+    def _dec_author_doc_count(self, author_snapshot):
+        count = author_snapshot.get(u'doc_count')
         if int(count) == 1:
             self._delete_author(author_snapshot.reference)
         else:
             new_count = int(count) - 1
-            author_snapshot.reference.update({u'paper_count': str(new_count)})
+            author_snapshot.reference.update({u'doc_count': str(new_count)})
 
     def _delete_author(self, author_ref):
         author_ref.delete()
@@ -198,7 +204,7 @@ class DatabaseAuthorMixin():
 #             all_notes += note_list
 #         return all_notes
 
-class Database(DatabaseAuthorMixin, DatabasePaperMixin):
+class Database(DatabaseAuthorMixin, DatabaseDocMixin):
     def __init__(self):
         firebase_admin.initialize_app()
         self.db = firestore.client()

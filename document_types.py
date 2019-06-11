@@ -1,5 +1,7 @@
-class Paper():
-    def __init__(self, title=None, authors=None, year=None, doi=None, cited_by=[], citing=[], id=None):
+class Doc():
+    valid_doctypes = ["papers", "notebooks"]
+    def __init__(self, doctype="docs", title=None, authors=None, year=None, doi=None, cited_by=[], citing=[], id=None):
+        self.doctype = doctype
         self.title = title
         self.authors = authors
         self.year = year
@@ -15,50 +17,54 @@ class Paper():
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        paper = Paper(title=source[u'title'], authors=source[u'authors'], id=ref.id)
+        doc = Doc(doctype=source[u'doctype'], \
+                  title=source[u'title'], \
+                  authors=source[u'authors'], \
+                  id=ref.id)
 
         if u'year' in source:
-            paper.year = source[u'year']
+            doc.year = source[u'year']
 
         if u'doi' in source:
-            paper.doi = source[u'doi']
+            doc.doi = source[u'doi']
 
         if u'cited_by' in source:
-            paper.cited_by = source[u'cited_by']
+            doc.cited_by = source[u'cited_by']
 
         if u'citing' in source:
-            paper.citing = source[u'citing']
+            doc.citing = source[u'citing']
 
-        return paper
+        return doc
 
     def to_dict(self):
-        paper = {
+        doc = {
+            u'doctype':self.doctype,
             u'title': self.title,
             u'authors': self.authors,
         }
 
         if self.year is not None:
-            paper[u'year'] = self.year
+            doc[u'year'] = self.year
 
         if self.doi is not None:
-            paper[u'doi'] = self.doi
+            doc[u'doi'] = self.doi
 
         if self.cited_by is not None:
-            paper[u'cited_by'] = self.cited_by
+            doc[u'cited_by'] = self.cited_by
 
         if self.citing is not None:
-            paper[u'citing'] = self.citing
+            doc[u'citing'] = self.citing
 
         if self.id is not None:
-            paper[u'id'] = self.id
+            doc[u'id'] = self.id
 
-        return paper
+        return doc
 
 class Author():
-    def __init__(self, lastname, firstname, paper_count=0, affiliation=None, email=None, id=None):
+    def __init__(self, lastname, firstname, doc_count=0, affiliation=None, email=None, id=None):
         self.lastname = lastname
         self.firstname = firstname
-        self.paper_count = paper_count
+        self.doc_count = doc_count
         self.affiliation = affiliation
         self.email = email
         self.id = id
@@ -66,7 +72,7 @@ class Author():
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        author = Author(source[u'lastname'], source[u'firstname'], source[u'paper_count'], id=ref.id)
+        author = Author(source[u'lastname'], source[u'firstname'], source[u'doc_count'], id=ref.id)
 
         if u'affiliation' in source:
             author.affiliation = source[u'affiliation']
@@ -80,7 +86,7 @@ class Author():
         author = {
             u'lastname': self.lastname,
             u'firstname': self.firstname,
-            u'paper_count': self.paper_count,
+            u'doc_count': self.doc_count,
         }
 
         if self.affiliation:
