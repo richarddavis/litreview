@@ -187,6 +187,7 @@ class LitreviewShell(cmd2.Cmd):
         for doc in self.all_docs:
             self.do_doc_info(str(doc_index))
             doc_index += 1
+        print("")
 
     def do_select_doc(self, line):
         while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
@@ -207,24 +208,17 @@ class LitreviewShell(cmd2.Cmd):
         self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
         self.do_note_tree("")
 
-    def do_doc_info(self, line):
+    def do_doc(self, line):
         print("")
-        doc = None
-        if line != "" and line.isnumeric():
-            if int(line) >= len(self.all_docs) or int(line) < 0:
-                print("That doc does not exist.")
-                print("")
-                return
-            else:
-                doc = self.all_docs[int(line)]
-                self.print_indented("[{}]".format(line))
-        else:
-            if self.current_doc == None:
-                print("Please select a doc first.")
-                print("")
-                return
-            else:
-                doc = self.current_doc
+        self.print_doc_info(self.current_doc)
+        print("")
+        return
+
+    def print_doc_info(self, doc):
+        if doc is None:
+            print ("No document selected.")
+            return
+
         self.print_indented("Title: {0}".format(doc.title))
         self.print_indented("Authors:")
         for author in doc.authors:
@@ -232,7 +226,29 @@ class LitreviewShell(cmd2.Cmd):
         self.print_indented("DOI: {0}".format(doc.doi))
         self.print_indented("Year: {0}".format(doc.year))
         self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(doc))))
-        print("")
+
+    def do_doc_info(self, line):
+        doc = None
+        if line != "" and line.isnumeric():
+            if int(line) >= len(self.all_docs) or int(line) < 0:
+                print("")
+                print("That doc does not exist.")
+                print("")
+                return
+            else:
+                doc = self.all_docs[int(line)]
+                print("")
+                self.print_indented("[{}]".format(line))
+        else:
+            if self.current_doc == None:
+                print("")
+                print("Please select a doc first.")
+                print("")
+                return
+            else:
+                doc = self.current_doc
+
+        self.print_doc_info(doc)
 
     def do_add_link(self, line):
         if self.current_doc is None:
@@ -310,30 +326,36 @@ class LitreviewShell(cmd2.Cmd):
             return
 
         outlinks = self.current_doc.outlinks
-        self.print_indented("Outlinks:")
         index_map = {}
         current_index = 0
-        for outlinks_doc_id in outlinks:
-            master_index = 0
-            for doc in self.all_docs:
-                if outlinks_doc_id == doc.id:
-                    self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
-                    index_map[current_index] = master_index
-                    print("")
-                master_index += 1
-            current_index += 1
+        print("")
+
+        if len(outlinks) > 0:
+            self.print_indented("Outlinks:")
+            print("")
+            for outlinks_doc_id in outlinks:
+                master_index = 0
+                for doc in self.all_docs:
+                    if outlinks_doc_id == doc.id:
+                        self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
+                        index_map[current_index] = master_index
+                        print("")
+                    master_index += 1
+                current_index += 1
 
         inlinks = self.current_doc.inlinks
-        self.print_indented("Inlinks:")
-        for inlinks_id in inlinks:
-            master_index = 0
-            for doc in self.all_docs:
-                if inlinks_id == doc.id:
-                    self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
-                    index_map[current_index] = master_index
-                    print("")
-                master_index += 1
-            current_index += 1
+        if len(inlinks) > 0:
+            self.print_indented("Inlinks:")
+            for inlinks_id in inlinks:
+                master_index = 0
+                for doc in self.all_docs:
+                    if inlinks_id == doc.id:
+                        self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
+                        index_map[current_index] = master_index
+                        print("")
+                    master_index += 1
+                current_index += 1
+            print("")
 
         try:
             line = input('Jump to doc: ')
@@ -514,23 +536,25 @@ class LitreviewShell(cmd2.Cmd):
                 return
 
     def do_notes(self, line):
-        print("")
         if self.current_doc == None:
+            print("")
             print("Please select a doc first.")
             print("")
             return
 
         if self.notes_at_current_level == []:
+            print("")
             print("No notes at current level.")
             print("")
             return
 
         note_index = 0
+        print("")
         for note in self.notes_at_current_level:
             self.print_indented("[Note {0}:]".format(note_index))
-            self.note_info(note)
-            note_index += 1
+            self.print_note_info(note)
             print("")
+            note_index += 1
 
     def do_select_note(self, line):
         while not (line != "" and line.isnumeric() and int(line) < len(self.notes_at_current_level) and int(line) >= 0):
@@ -543,6 +567,11 @@ class LitreviewShell(cmd2.Cmd):
         self.note_history.append(self.notes_at_current_level[int(line)])
         self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
         self.do_notes("")
+
+    def do_note_debug(self, line):
+        print(self.note_history)
+        print(self.get_current_note())
+        print(self.notes_at_current_level)
 
     def do_pop_note(self, line):
         if self.note_history == []:
@@ -574,46 +603,22 @@ class LitreviewShell(cmd2.Cmd):
         self.note_index_at_current_level = 0
         return notes_at_current_level
 
-    def note_info(self, current_note, indentation_multiplier=1):
-        if current_note is None:
-            print("")
-            print("No current note.")
-            print("")
+    def print_note_info(self, note, indentation_multiplier=1):
+        if note is None:
+            print("No note selected.")
             return
-        self.print_indented("Notetype: {0}".format(current_note.notetype), indentation_multiplier)
-        self.print_indented("Body: {0}".format(current_note.body), indentation_multiplier)
+        self.print_indented("Notetype: {0}".format(note.notetype), indentation_multiplier)
+        self.print_indented("Body: {0}".format(note.body), indentation_multiplier)
         self.print_indented("Attached notetypes:", indentation_multiplier)
-        notetypes = self.get_notetypes_by_obj(current_note)
+        notetypes = self.get_notetypes_by_obj(note)
         for notetype in notetypes:
             self.print_indented(notetype, indentation_multiplier + 1)
 
-    def do_note_info(self, line):
+    def do_note(self, line):
         print("")
-        cn = None
-        if self.notes_at_current_level == []:
-            print("No notes to show.")
-            print("")
-            return
-        elif line == "":
-            if self.get_current_note() is None:
-                print("No current note.")
-                print("")
-                return
-            cn = self.get_current_note()
-        elif int(line) >= len(self.notes_at_current_level) or int(line) < 0:
-            print("That note does not exist.")
-            print("")
-            return
-        else:
-            cn = self.notes_at_current_level[int(line)]
-
-        self.print_indented("Notetype: {0}".format(cn.notetype))
-        self.print_indented("Body: {0}".format(cn.body))
-        self.print_indented("Attached notetypes:")
-        notetypes = self.get_notetypes_by_obj(cn)
-        for notetype in notetypes:
-            self.print_indented(notetype, 2)
+        self.print_note_info(self.get_current_note())
         print("")
+        return
 
     def do_get_next_note(self, line):
         print("")
@@ -662,12 +667,13 @@ class LitreviewShell(cmd2.Cmd):
         for note in note_list:
             self.note_tree_helper(note, depth, note_index)
             note_index += 1
-            print("")
+
+        print("")
 
     def note_tree_helper(self, current_note, depth, note_index):
         print("")
         self.print_indented("[Note {0}:]".format(note_index), depth)
-        self.note_info(current_note, depth)
+        self.print_note_info(current_note, depth)
         note_list = self.get_notes_by_obj(current_note)
         if note_list == []:
             return
