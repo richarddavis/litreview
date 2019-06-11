@@ -1,5 +1,5 @@
 class Paper():
-    def __init__(self, title, authors, year=None, doi=None, id=None):
+    def __init__(self, title=None, authors=None, year=None, doi=None, cited_by=[], citing=[], id=None):
         self.title = title
         self.authors = authors
         self.year = year
@@ -8,18 +8,26 @@ class Paper():
         self.doi = doi
         if self.doi is not None:
             self.doi = doi.lower()
+        self.cited_by = cited_by
+        self.citing = citing
         self.id = id
 
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        paper = Paper(source[u'title'], source[u'authors'], id=ref.id)
+        paper = Paper(title=source[u'title'], authors=source[u'authors'], id=ref.id)
 
         if u'year' in source:
             paper.year = source[u'year']
 
         if u'doi' in source:
             paper.doi = source[u'doi']
+
+        if u'cited_by' in source:
+            paper.cited_by = source[u'cited_by']
+
+        if u'citing' in source:
+            paper.citing = source[u'citing']
 
         return paper
 
@@ -35,15 +43,22 @@ class Paper():
         if self.doi is not None:
             paper[u'doi'] = self.doi
 
+        if self.cited_by is not None:
+            paper[u'cited_by'] = self.cited_by
+
+        if self.citing is not None:
+            paper[u'citing'] = self.citing
+
         if self.id is not None:
             paper[u'id'] = self.id
 
         return paper
 
 class Author():
-    def __init__(self, lastname, firstname, affiliation=None, email=None, id=None):
+    def __init__(self, lastname, firstname, paper_count=0, affiliation=None, email=None, id=None):
         self.lastname = lastname
         self.firstname = firstname
+        self.paper_count = paper_count
         self.affiliation = affiliation
         self.email = email
         self.id = id
@@ -51,7 +66,7 @@ class Author():
     @staticmethod
     def from_ref(ref):
         source = ref.to_dict()
-        author = Author(source[u'lastname'], source[u'firstname'], id=ref.id)
+        author = Author(source[u'lastname'], source[u'firstname'], source[u'paper_count'], id=ref.id)
 
         if u'affiliation' in source:
             author.affiliation = source[u'affiliation']
@@ -65,10 +80,8 @@ class Author():
         author = {
             u'lastname': self.lastname,
             u'firstname': self.firstname,
+            u'paper_count': self.paper_count,
         }
-
-        if self.id is not None:
-            author[u'id'] = self.id
 
         if self.affiliation:
             author[u'affiliation'] = self.affiliation
@@ -76,13 +89,16 @@ class Author():
         if self.email:
             author[u'email'] = self.email
 
+        if self.id is not None:
+            author[u'id'] = self.id
+
         return author
 
 class Note():
     valid_notetypes = ["notes", "selections", "ideas", \
                        "todos", "measures", "designs", \
                        "procedures", "results", "summaries",
-                       "challenges"]
+                       "challenges", "RQs", "theories"]
 
     def __init__(self, ref_id, notetype, body, id=None, page=None):
         self.ref_id = ref_id

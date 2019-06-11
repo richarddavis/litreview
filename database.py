@@ -10,14 +10,16 @@ class DatabasePaperMixin():
         pass
 
     def add_paper(self, paper):
-        paper_ref = self._get_paper_by_title(paper.title)
-        if paper_ref is not None:
+        paper_obj = self._get_paper_by_title(paper.title)
+        if paper_obj is not None:
             print("Paper already in database.")
         else:
             print("Adding paper to database.")
             for author in paper.authors:
                 new_author = Author(**author)
-                self.add_author(new_author)
+                self._add_author(new_author)
+                author_snapshot = self._get_author(new_author)
+                self._inc_author_paper_count(author_snapshot)
             self._get_papers().add(paper.to_dict())
 
     def _get_papers(self):
@@ -34,8 +36,8 @@ class DatabasePaperMixin():
             return None
 
     def _get_paper_by_title(self, title):
-        papers = self._get_papers().get()
-        for p in papers:
+        papers = self._get_papers()
+        for p in papers.stream():
             if p.to_dict()[u'title'].lower() == title.lower():
                 return Paper.from_ref(p)
         return None
@@ -51,14 +53,49 @@ class DatabasePaperMixin():
         papers = self._get_papers()
         return [Paper.from_ref(p) for p in papers.stream()]
 
+    def delete_paper(self, paper):
+        paper_ref = self._get_paper(paper)
+        if paper_ref is not None:
+            paper_ref.delete()
+            for author in paper.authors:
+                new_author = Author(**author)
+                author_snapshot = self._get_author(new_author)
+                self._dec_author_paper_count(author_snapshot)
+            return True
+        else:
+            return False
+
+    def add_citation(self, citing_paper, cited_paper):
+        citing_paper_ref = self._get_paper(citing_paper)
+        cited_paper_ref = self._get_paper(cited_paper)
+
+        if citing_paper_ref is None or cited_paper_ref is None:
+            print("No paper selected. Quitting.")
+            return
+        try:
+            citing_papers_out_citations = citing_paper_ref.get().get(u'citing')
+            citing_papers_out_citations.append(str(cited_paper_ref.id))
+            citing_paper_ref.update({u'citing':citing_papers_out_citations})
+        except KeyError:
+            cited_papers = [str(cited_paper_ref.id)]
+            citing_paper_ref.update({u'citing':cited_papers})
+
+        try:
+            cited_papers_in_citations = cited_paper_ref.get().get(u'cited_by')
+            cited_papers_in_citations.append(str(citing_paper_ref.id))
+            cited_paper_ref.update({u'cited_by':cited_papers_in_citations})
+        except KeyError:
+            citing_papers = [str(citing_paper_ref.id)]
+            cited_paper_ref.update({u'cited_by':citing_papers})
+
     def add_note(self, note, paper):
         paper_ref = self._get_paper(paper)
         if paper_ref is None:
             print("Please add current paper to database before adding notes.")
             return
 
-        notes_ref = paper_ref.collection(u'notes')
-        notes_ref.add(note.to_dict())
+        note_refs = paper_ref.collection(u'notes')
+        note_refs.add(note.to_dict())
 
     def get_notes(self, paper):
         paper_ref = self._get_paper(paper)
@@ -66,20 +103,34 @@ class DatabasePaperMixin():
             print("Please add current paper to database first.")
             return
 
-        notes_ref = paper_ref.collection(u'notes').get()
-        return [Note.from_ref(note) for note in notes_ref]
+        note_refs = paper_ref.collection(u'notes').get()
+        return [Note.from_ref(note) for note in note_refs]
+
+    def delete_note(self, note, paper):
+        paper_ref = self._get_paper(paper)
+        if paper_ref is None:
+            return False
+        note_refs = paper_ref.collection(u'notes').get()
+        for note_ref in note_refs:
+            if note_ref.to_dict()[u'id'] == note.id:
+                note_ref.delete()
+                return True
+            else:
+                return False
 
 class DatabaseAuthorMixin():
     def __init__(self):
         pass
 
-    def add_author(self, new_author):
-        author_ref = self._get_author(new_author)
-        if author_ref is not None:
+    def _add_author(self, new_author):
+        author_snapshot = self._get_author(new_author)
+        if author_snapshot is not None:
             print("Author alredy in database.")
+            return
         else:
             print("Adding author to database.")
             self._get_authors().add(new_author.to_dict())
+            return
 
     def _get_authors(self):
         return self.db.collection(u'authors')
@@ -91,6 +142,22 @@ class DatabaseAuthorMixin():
             return None
         else:
             return authors[0]
+
+    def _inc_author_paper_count(self, author_snapshot):
+        count = author_snapshot.get(u'paper_count')
+        new_count = int(count) + 1
+        author_snapshot.reference.update({u'paper_count': str(new_count)})
+
+    def _dec_author_paper_count(self, author_snapshot):
+        count = author_snapshot.get(u'paper_count')
+        if int(count) == 1:
+            self._delete_author(author_snapshot.reference)
+        else:
+            new_count = int(count) - 1
+            author_snapshot.reference.update({u'paper_count': str(new_count)})
+
+    def _delete_author(self, author_ref):
+        author_ref.delete()
 
 # class DatabaseNoteMixin():
 #     def __init__(self):
