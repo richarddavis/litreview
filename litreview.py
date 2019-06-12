@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from time import sleep
 from database import Database
 from document_types import *
@@ -18,19 +18,21 @@ class LitreviewShell(cmd2.Cmd):
         self.db = Database()
         self.current_doc = None
         self.current_doc_index = None
-        self.notes_at_current_level = []
-        self.note_index_at_current_level = 0
+        self.child_notes = []
+        self.child_note_index = 0
         self.note_history = []
         self.link_history = []
         self.all_docs = self.db.get_docs()
+        self.all_notes = []
 
     def reset(self):
         self.prompt = u'(lr) '
         self.current_doc = None
         self.current_doc_index = None
-        self.notes_at_current_level = []
-        self.note_index_at_current_level = 0
+        self.child_notes = []
+        self.child_note_index = 0
         self.note_history = []
+        self.all_notes = []
 
     def update_prompt(self):
         if self.current_doc is None:
@@ -38,8 +40,32 @@ class LitreviewShell(cmd2.Cmd):
         truncated_title = self.current_doc.title[:40]
         self.prompt = u'(lr: ' + truncated_title + u'...) '
 
+    def do_whereami(self, line):
+        truncated = True
+        if line != "":
+            truncated = False
+
+        if truncated == True:
+            if self.current_doc is not None:
+                self.print_indented("Current doc: {}...".format(self.current_doc.title[:40]))
+            if self.get_current_note() is not None:
+                self.print_indented("Current note: {}...".format(self.get_current_note().body[:40]))
+        else:
+            if self.current_doc is not None:
+                self.print_indented("Current doc: {}".format(self.current_doc.title))
+            if self.get_current_note() is not None:
+                self.print_indented("Current note: {}".format(self.get_current_note().body))
+
     def reload_docs(self):
         self.all_docs = self.db.get_docs()
+
+    def reload_notes(self):
+        if self.current_doc == None:
+            return
+        self.all_notes = self.db.get_notes(self.current_doc)
+
+    def get_notes(self):
+        return self.all_notes
 
     def set_current_doc(self, *args):
         if not args:
@@ -53,12 +79,13 @@ class LitreviewShell(cmd2.Cmd):
         if doc_index >= 0 and doc_index < len(self.all_docs):
             self.current_doc_index = doc_index
             self.current_doc = self.all_docs[self.current_doc_index]
+            self.reload_notes()
 
     def print_indented(self, formatted_text, indentation_multiplier = 1):
         print(textwrap.fill(formatted_text,
                             initial_indent = " " * self.INDENT * indentation_multiplier,
                             subsequent_indent  = " " * self.INDENT * indentation_multiplier,
-                            width = 80))
+                            width = 150))
 
     def get_current_note(self):
         if self.note_history == []:
@@ -205,7 +232,7 @@ class LitreviewShell(cmd2.Cmd):
         self.reset()
         self.set_current_doc(int(line))
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+        self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
 
     def do_doc(self, line):
@@ -369,19 +396,36 @@ class LitreviewShell(cmd2.Cmd):
         self.reset()
         self.set_current_doc(index_map[int(line)])
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+        self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
 
-    def do_pop_link(self, line):
+    def do_pop(self, line):
+        if line == "note":
+            self.pop_note("")
+        elif line == "doc":
+            self.pop_link("")
+        else:
+            if self.note_history != []:
+                self.pop_note("")
+            elif self.link_history != []:
+                self.pop_link("")
+            else:
+                print("")
+                print("Nothing to pop.")
+                print("")
+
+    def pop_link(self, line):
         if self.link_history == []:
             print("")
             print("Already at beginning.")
             print("")
             return
         self.reset()
-        self.current_doc = self.link_history.pop()
+        new_current_doc = self.link_history.pop()
+        new_current_doc_index = self.all_docs.index(new_current_doc)
+        self.set_current_doc(new_current_doc_index)
         self.update_prompt()
-        self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+        self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
 
     def get_notetypes_by_obj(self, target_obj):
@@ -390,7 +434,7 @@ class LitreviewShell(cmd2.Cmd):
             print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_doc)
+        all_notes = self.get_notes()
         return list({note.notetype for note in all_notes if note.ref_id == target_obj.id})
 
     def get_notes_by_obj(self, target_obj):
@@ -399,8 +443,10 @@ class LitreviewShell(cmd2.Cmd):
             print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_doc)
-        return [note for note in all_notes if note.ref_id == target_obj.id]
+        all_notes = self.get_notes()
+        obj_notes = [note for note in all_notes if note.ref_id == target_obj.id]
+        obj_notes.sort()
+        return obj_notes
 
     def do_add_note(self, line):
         print("")
@@ -456,7 +502,8 @@ class LitreviewShell(cmd2.Cmd):
 
         note = Note(**note_dict)
         self.db.add_note(note, self.current_doc)
-        self.notes_at_current_level = self.get_notes_at_current_level(target_obj)
+        self.reload_notes()
+        self.child_notes = self.get_child_notes(target_obj)
 
     def do_delete_note(self, line):
         print("")
@@ -473,10 +520,11 @@ class LitreviewShell(cmd2.Cmd):
                         except ValueError:
                             pass
 
+                        self.reload_notes()
                         if self.note_history == []:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+                            self.child_notes = self.get_child_notes(self.current_doc)
                         else:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+                            self.child_notes = self.get_child_notes(self.get_current_note())
 
                         print("")
                         print ("Note deleted.")
@@ -492,10 +540,10 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
         else:
-            while not (line != "" and line.isnumeric() and int(line) < len(self.notes_at_current_level) and int(line) >= 0):
+            while not (line != "" and line.isnumeric() and int(line) < len(self.child_notes) and int(line) >= 0):
                 print("")
                 note_index = 0
-                for note in self.notes_at_current_level:
+                for note in self.child_notes:
                     self.print_indented("[{0}]: {1}".format(note_index, note.body))
                     note_index += 1
                     print("")
@@ -504,10 +552,10 @@ class LitreviewShell(cmd2.Cmd):
                 except EOFError:
                     return
 
-            self.print_indented("Selected note: {0}".format(self.notes_at_current_level[int(line)].body))
+            self.print_indented("Selected note: {0}".format(self.child_notes[int(line)].body))
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
-                    note_to_delete = self.notes_at_current_level[int(line)]
+                    note_to_delete = self.child_notes[int(line)]
                     deleted = self.db.delete_note(note_to_delete, self.current_doc)
                     if deleted == True:
 
@@ -516,10 +564,11 @@ class LitreviewShell(cmd2.Cmd):
                         except ValueError:
                             pass
 
+                        self.reload_notes()
                         if self.note_history == []:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+                            self.child_notes = self.get_child_notes(self.current_doc)
                         else:
-                            self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+                            self.child_notes = self.get_child_notes(self.get_current_note())
 
                         print("")
                         print("Note deleted.")
@@ -542,38 +591,54 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
 
-        if self.notes_at_current_level == []:
+        if self.child_notes == []:
             print("")
-            print("No notes at current level.")
+            print("No attached notes.")
             print("")
             return
 
+        truncated = True
+        if line != "":
+            truncated = False
+
         note_index = 0
         print("")
-        for note in self.notes_at_current_level:
+        for note in self.child_notes:
             self.print_indented("[Note {0}:]".format(note_index))
-            self.print_note_info(note)
+            self.print_note_info(note, truncated=truncated)
             print("")
             note_index += 1
 
     def do_select_note(self, line):
-        while not (line != "" and line.isnumeric() and int(line) < len(self.notes_at_current_level) and int(line) >= 0):
+        note_indices = line.split()
+        if len(note_indices) == 0:
             self.do_notes("")
             try:
                 line = input('Please select a note: ')
+                note_indices = [line]
             except EOFError:
                 return
 
-        self.note_history.append(self.notes_at_current_level[int(line)])
-        self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+        current_note_backup = self.get_current_note()
+        child_notes_backup = self.child_notes
+
+        for ni in note_indices:
+            if not (ni.isnumeric() and int(ni) < len(self.child_notes) and int(ni) >= 0):
+                self.child_notes = child_notes_backup
+                print("")
+                print("No note selected.")
+                print("")
+                return
+            else:
+                temp_note = self.child_notes[int(ni)]
+                self.child_notes = self.get_child_notes(temp_note)
+                # print("temp_note is {}".format(temp_note))
+                # print("get_child_notes() returned {}".format(self.child_notes))
+
+        self.note_history.append(temp_note)
         self.do_notes("")
 
-    def do_note_debug(self, line):
-        print(self.note_history)
-        print(self.get_current_note())
-        print(self.notes_at_current_level)
-
-    def do_pop_note(self, line):
+    def pop_note(self, line):
         if self.note_history == []:
             print("")
             print("Already at top level.")
@@ -583,55 +648,72 @@ class LitreviewShell(cmd2.Cmd):
         self.note_history.pop()
 
         if self.note_history == []:
-            self.notes_at_current_level = self.get_notes_at_current_level(self.current_doc)
+            self.child_notes = self.get_child_notes(self.current_doc)
         else:
-            self.notes_at_current_level = self.get_notes_at_current_level(self.get_current_note())
+            self.child_notes = self.get_child_notes(self.get_current_note())
 
         self.do_notes("")
 
-    def get_notes_at_current_level(self, target_obj):
+    def get_child_notes(self, target_obj):
         if self.current_doc is None:
             print("")
             print("Please select a doc first.")
             print("")
             return
-        all_notes = self.db.get_notes(self.current_doc)
-        notes_at_current_level = []
+        all_notes = self.get_notes()
+        child_notes = []
         for note in all_notes:
             if note.ref_id == target_obj.id:
-                notes_at_current_level.append(note)
-        self.note_index_at_current_level = 0
-        return notes_at_current_level
+                child_notes.append(note)
 
-    def print_note_info(self, note, indentation_multiplier=1):
+        child_notes.sort()
+        self.child_note_index = 0
+        return child_notes
+
+    def print_note_info(self, note, indentation_multiplier=1, truncated=True, verbose=True):
         if note is None:
             print("No note selected.")
             return
-        self.print_indented("Notetype: {0}".format(note.notetype), indentation_multiplier)
-        self.print_indented("Body: {0}".format(note.body), indentation_multiplier)
-        self.print_indented("Attached notetypes:", indentation_multiplier)
-        notetypes = self.get_notetypes_by_obj(note)
-        for notetype in notetypes:
-            self.print_indented(notetype, indentation_multiplier + 1)
+
+        if verbose == True:
+            self.print_indented("Notetype: {0}, Page: {1}".format(note.notetype, getattr(note, 'page', 'NA')), indentation_multiplier)
+            if truncated == False:
+                self.print_indented("Body: {0}".format(note.body), indentation_multiplier)
+                self.print_indented("Attached notetypes:", indentation_multiplier)
+                notetypes = self.get_notetypes_by_obj(note)
+                for notetype in notetypes:
+                    self.print_indented(notetype, indentation_multiplier + 1)
+            else:
+                truncated_body = note.body.split('.')[0]
+                self.print_indented("Body: {0}...".format(truncated_body), indentation_multiplier)
+        else:
+            print("<li>{0} ({1})</li>".format(note.body, note.notetype))
 
     def do_note(self, line):
-        print("")
-        self.print_note_info(self.get_current_note())
+        current_note = self.get_current_note()
+        if current_note is None:
+            return
+
+        truncated = True
+        if line != "":
+            truncated = False
+
+        self.get_note_with_child_notes(current_note, truncated)
         print("")
         return
 
     def do_get_next_note(self, line):
         print("")
-        if self.notes_at_current_level == []:
+        if self.child_notes == []:
             print("No notes at current level.")
             print("")
             return
-        elif self.note_index_at_current_level >= len(self.notes_at_current_level):
+        elif self.child_note_index >= len(self.child_notes):
             print("Returning to the first note at the current level.")
             print("")
-            self.note_index_at_current_level = 0
+            self.child_note_index = 0
 
-        note = self.notes_at_current_level[self.note_index_at_current_level]
+        note = self.child_notes[self.child_note_index]
 
         self.print_indented("Notetype: {0}".format(note.notetype))
         self.print_indented("Body: {0}".format(note.body))
@@ -639,7 +721,7 @@ class LitreviewShell(cmd2.Cmd):
         notetypes = self.get_notetypes_by_obj(note)
         for notetype in notetypes:
             self.print_indented(notetype, 2)
-        self.note_index_at_current_level += 1
+        self.child_note_index += 1
         print("")
 
     def do_note_tree(self, line):
@@ -656,6 +738,14 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
 
+        verbose = True
+        if line == "clean":
+            verbose = False
+
+        truncated = True
+        if line != "":
+            truncated = False
+
         # note_list = self.db.get_all_notes_by_obj(self.current_doc)
         note_list = self.get_notes_by_obj(self.current_doc)
         if note_list == []:
@@ -663,25 +753,44 @@ class LitreviewShell(cmd2.Cmd):
             print("No notes to show.")
             print("")
             return
+
+        if verbose == False:
+            print("<ul>")
         note_index = 0
         for note in note_list:
-            self.note_tree_helper(note, depth, note_index)
+            self.note_tree_helper(note, depth, note_index, truncated=truncated, verbose=verbose)
             note_index += 1
 
-        print("")
+        if verbose == True:
+            print("")
+        else:
+            print("</ul>")
 
-    def note_tree_helper(self, current_note, depth, note_index):
-        print("")
-        self.print_indented("[Note {0}:]".format(note_index), depth)
-        self.print_note_info(current_note, depth)
+    def note_tree_helper(self, current_note, depth, note_index, truncated=True, verbose=True):
+        truncate = truncated
+        if depth == 1:
+            truncate = False
+
+        if verbose == True:
+            print("")
+            self.print_indented("[Note {0}:]".format(note_index), depth)
+        self.print_note_info(current_note, depth, truncate, verbose=verbose)
         note_list = self.get_notes_by_obj(current_note)
         if note_list == []:
             return
         else:
+            if verbose == False:
+                print("<ul>")
             child_note_index = 0
             for note in note_list:
-                self.note_tree_helper(note, depth+1, child_note_index)
+                self.note_tree_helper(note, depth+1, child_note_index, truncated, verbose=verbose)
                 child_note_index += 1
+            if verbose == False:
+                print("</ul>")
+
+    def get_note_with_child_notes(self, current_note, truncated=True):
+        self.note_tree_helper(current_note, 1, "and Children", truncated=truncated)
+        return
 
     def do_EOF(self, line):
         return True

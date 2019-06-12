@@ -1,6 +1,8 @@
+from datetime import datetime
+
 class Doc():
     valid_doctypes = ["papers", "notebooks"]
-    def __init__(self, doctype="docs", title=None, authors=None, year=None, doi=None, inlinks=[], outlinks=[], id=None):
+    def __init__(self, doctype="docs", title=None, authors=None, year=None, doi=None, inlinks=[], outlinks=[], id=None, update_time=None):
         self.doctype = doctype
         self.title = title
         self.authors = authors
@@ -13,6 +15,15 @@ class Doc():
         self.inlinks = inlinks
         self.outlinks = outlinks
         self.id = id
+        self.update_time = update_time
+
+    def __lt__(self, other):
+        return (getattr(self, 'update_time')) < (getattr(other, 'update_time'))
+
+    # def __eq__(self, other):
+    #     mine = getattr(self, 'update_time')
+    #     other = getattr(other, 'update_time')
+    #     return mine == other
 
     @staticmethod
     def from_ref(ref):
@@ -33,6 +44,8 @@ class Doc():
 
         if u'outlinks' in source:
             doc.outlinks = source[u'outlinks']
+
+        doc.update_time = datetime.fromtimestamp(ref.update_time.seconds + ref.update_time.nanos/1e9)
 
         return doc
 
@@ -107,14 +120,29 @@ class Note():
                        "challenges", "RQs", "theories", \
                        "hypotheses", "reflections"]
 
-    def __init__(self, ref_id, notetype, body, id=None, page=None):
+    def __init__(self, ref_id, notetype, body, id=None, page=None, update_time=None):
+        self.sortattr = 'page'
         self.ref_id = ref_id
         self.notetype = notetype
         self.body = body
         self.id = id
-        self.page = page
+        if page is not None:
+            self.page = page
         if self.notetype not in Note.valid_notetypes:
             raise ValueError(u'{0} is not a valid notetype'.format(notetype))
+        self.update_time = update_time
+
+    def __lt__(self, other):
+        mypage = int(getattr(self, 'page', '0'))
+        otherpage = int(getattr(other, 'page', '0'))
+        mytime = getattr(self, 'update_time')
+        othertime = getattr(other, 'update_time')
+        return (mypage, mytime) < (otherpage, othertime)
+
+    # def __eq__(self, other):
+    #     mypage = getattr(self, 'page', '0')
+    #     otherpage = getattr(other, 'page', '0')
+    #     return int(mypage) == int(otherpage)
 
     @staticmethod
     def from_ref(ref):
@@ -122,6 +150,7 @@ class Note():
         note = Note(source[u'ref_id'], source[u'notetype'], source[u'body'], id=ref.id)
         if u'page' in source:
             note.page = source[u'page']
+        note.update_time = datetime.fromtimestamp(ref.update_time.seconds + ref.update_time.nanos/1e9)
         return note
 
     def to_dict(self):
@@ -134,7 +163,7 @@ class Note():
         if self.id is not None:
             note[u'id'] = self.id
 
-        if self.page is not None:
+        if getattr(self, 'page', None) is not None:
             note[u'page'] = self.page
 
         return note

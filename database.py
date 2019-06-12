@@ -51,7 +51,9 @@ class DatabaseDocMixin():
 
     def get_docs(self):
         docs = self._get_docs()
-        return [Doc.from_ref(p) for p in docs.stream()]
+        doc_objs = [Doc.from_ref(p) for p in docs.stream()]
+        doc_objs.sort()
+        return doc_objs
 
     def delete_doc(self, doc):
         doc_ref = self._get_doc(doc)
