@@ -56,6 +56,15 @@ class LitreviewShell(cmd2.Cmd):
             if self.get_current_note() is not None:
                 self.print_indented("Current note: {}".format(self.get_current_note().body))
 
+    # PROBLEM: When self.reload_docs() or self.reload_notes() is called,
+    # link_history and note_history will both be corrupted.
+    # Keep in mind that self.all_docs and self.all_notes are sorted, so simply replacing them
+    # with a dict that maps ids to objects would not work.
+    # One solution could be to keep a dict mapping id to the index in all_notes or all_docs.
+    # Then, note_history and link_history could store ids, and pushing to and popping from
+    # history could be managed by a helper function that accepts and returns objects, but
+    # works with ids and indices internally.
+
     def reload_docs(self):
         self.all_docs = self.db.get_docs()
 
@@ -246,10 +255,17 @@ class LitreviewShell(cmd2.Cmd):
         self.do_note_tree("")
 
     def do_doc(self, line):
-        print("")
-        self.print_doc_info(self.current_doc)
-        print("")
-        return
+        if self.current_doc is None:
+            return
+
+        if line == "links":
+            self.get_links(self.current_doc)
+            return
+        else:
+            print("")
+            self.print_doc_info(self.current_doc)
+            print("")
+            return
 
     def print_doc_info(self, doc):
         if doc is None:
@@ -287,30 +303,56 @@ class LitreviewShell(cmd2.Cmd):
 
         self.print_doc_info(doc)
 
-    def do_add_link(self, line):
+    def do_link(self, line):
         if self.current_doc is None:
             print("")
             print("Please select a doc first.")
             print("")
             return
 
-        print("")
-        line = ""
-        doc_index = 0
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
-            for doc in self.all_docs:
-                self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
-                doc_index += 1
-                print("")
-            try:
-                line = input('Please select the doc to link to: ')
-            except EOFError:
-                return
-        in_doc = self.all_docs[int(line)]
+        link_from = "doc"
+        link_to = "doc"
 
-        self.db.add_link(self.current_doc, in_doc)
-        self.reload_docs()
-        self.set_current_doc(self.current_doc)
+        commands = line.split()
+        if len(commands) == 1:
+            if commands[0] == "note":
+                link_from = "note"
+        elif len(commands) == 3:
+            if commands[0] == "note":
+                link_from = "note"
+            if commands[2] == "note":
+                link_to = "note"
+
+        in_obj = None
+        if link_to == "doc":
+            print("")
+            choice = ""
+            doc_index = 0
+            while not (choice != "" and choice.isnumeric() and int(choice) < len(self.all_docs) and int(choice) >= 0):
+                for doc in self.all_docs:
+                    self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
+                    doc_index += 1
+                    print("")
+                try:
+                    choice = input('Please select the doc to link to: ')
+                except EOFError:
+                    return
+            in_obj = self.all_docs[int(choice)]
+        elif link_to == "note":
+            pass
+
+        if in_obj is None:
+            return
+
+        if link_from == "doc":
+            self.db.add_link(self.current_doc, in_obj)
+            self.reload_docs()
+            self.set_current_doc(self.current_doc)
+        elif link_from == "note":
+            self.db.add_link(self.get_current_note(), in_obj)
+            self.reload_notes()
+            # PROBLEM: Reload notes is not refreshing the current_note.
+            # See how set_current_doc works for a possible fix.
 
     def do_delete_link(self, line):
         if self.current_doc is None:
@@ -355,14 +397,12 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
 
-    def do_links(self, line):
-        if self.current_doc is None:
-            print("")
-            print("Please select a doc first.")
-            print("")
+    def get_links(self, obj=None):
+
+        if obj is None:
             return
 
-        outlinks = self.current_doc.outlinks
+        outlinks = obj.outlinks
         index_map = {}
         current_index = 0
         print("")
@@ -380,7 +420,7 @@ class LitreviewShell(cmd2.Cmd):
                     master_index += 1
                 current_index += 1
 
-        inlinks = self.current_doc.inlinks
+        inlinks = obj.inlinks
         if len(inlinks) > 0:
             self.print_indented("Inlinks:")
             for inlinks_id in inlinks:
@@ -402,12 +442,14 @@ class LitreviewShell(cmd2.Cmd):
         if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
             return
 
-        self.link_history.append(self.current_doc)
+        self.link_history.append(obj)
         self.reset()
         self.set_current_doc(self.all_docs[index_map[int(line)]])
         self.update_prompt()
-        self.child_notes = self.get_child_notes(self.current_doc)
+        self.child_notes = self.get_child_notes(obj)
         self.do_note_tree("")
+
+    # PROBLEM: Since I've added the ability to link from notes, the pop functions may be broken.
 
     def do_pop(self, line):
         if line == "note":
@@ -701,6 +743,10 @@ class LitreviewShell(cmd2.Cmd):
     def do_note(self, line):
         current_note = self.get_current_note()
         if current_note is None:
+            return
+
+        if line == "links":
+            self.get_links(current_note)
             return
 
         truncated = True
