@@ -25,43 +25,36 @@ class DatabaseDocMixin():
     def _get_docs(self):
         return self.db.collection(u'docs')
 
-    def _get_doc(self, doc):
-        # This function checks the database for a doc with the same id.
-        # If the doc hasn't been added, its ID is None.
-        try:
-            docs = self._get_docs()
-            p = docs.document(doc.id)
-            return p
-        except google.cloud.exceptions.NotFound:
-            return None
+    # def _get_doc(self, doc):
+    #     # This function checks the database for a doc with the same id.
+    #     # If the doc hasn't been added, its ID is None.
+    #     try:
+    #         docs = self._get_docs()
+    #         p = docs.document(doc.id)
+    #         return p
+    #     except google.cloud.exceptions.NotFound:
+    #         return None
 
     def _get_doc_by_title(self, title):
         docs = self._get_docs()
         for p in docs.stream():
             if p.to_dict()[u'title'].lower() == title.lower():
-                return Doc.from_ref(p)
+                return Doc.from_snapshot(p)
         return None
-
-    def get_doc(self, doc):
-        try:
-            p = self._get_docs().document(doc.id)
-            return Doc.from_ref(p)
-        except google.cloud.exceptions.NotFound:
-            return None
 
     def get_docs(self):
         docs = self._get_docs()
-        doc_objs = [Doc.from_ref(p) for p in docs.stream()]
+        doc_objs = [Doc.from_snapshot(p) for p in docs.stream()]
         doc_objs.sort()
         return doc_objs
 
     def delete_doc(self, doc):
-        doc_ref = self._get_doc(doc)
+        doc_ref = doc.db_reference
         if doc_ref is None:
             return False
 
         # Delete all attached notes
-        note_snapshots = doc_ref.collection(u'notes').get()
+        note_snapshots = doc_ref.collection(u'notes').steam()
         for note_snapshot in note_snapshots:
             note_snapshot.reference.delete()
 
@@ -73,20 +66,20 @@ class DatabaseDocMixin():
         doc_ref.delete()
         return True
 
-    def add_link(self, out_doc, in_doc):
-        # out_doc -> in_doc
+    def add_link(self, out_obj, in_obj):
+        # out_obj -> in_obj
 
-        # out_doc.out_refs is updated with in_doc.ref
-        # in_doc.in_refs is updated with out_doc.ref
+        # out_obj.outlinks is updated with in_obj.ref
+        # in_obj.inlinks is updated with out_obj.ref
 
-        out_ref = self._get_doc(out_doc)
-        in_ref = self._get_doc(in_doc)
+        out_ref = out_obj.db_reference
+        in_ref = in_obj.db_reference
 
         if out_ref is None or in_ref is None:
             print("No doc selected. Quitting.")
             return
 
-        # Update out_doc.out_refs with in_doc.ref
+        # Update out_obj.out_refs with in_obj.ref
         try:
             out_refs = out_ref.get().get(u'outlinks')
             out_refs.append(str(in_ref.id))
@@ -95,7 +88,7 @@ class DatabaseDocMixin():
             out_refs = [str(in_ref.id)]
             out_ref.update({u'outlinks':out_refs})
 
-        # Update in_doc.in_refs with out_doc.ref
+        # Update in_obj.in_refs with out_obj.ref
         try:
             in_refs = in_ref.get().get(u'inlinks')
             in_refs.append(str(out_ref.id))
@@ -104,40 +97,38 @@ class DatabaseDocMixin():
             in_refs = [str(out_ref.id)]
             in_ref.update({u'inlinks':in_refs})
 
-    def delete_link(self, out_doc, in_doc):
+    def delete_link(self, out_obj, in_obj):
         # When a doc is deleted any links that point to that doc should
         # also be removed. However, the program doesn't display these dangling
         # references to the user, so for now I'm not worrying about it.
 
-        out_ref = self._get_doc(out_doc)
-        in_ref = self._get_doc(in_doc)
+        out_ref = out_obj.db_reference
+        in_ref = in_obj.db_reference
 
         if out_ref is None or in_ref is None:
             print("No doc selected. Quitting.")
             return
 
-        # Update out_doc.out_refs with in_doc.ref
+        # Update out_obj.out_refs with in_obj.ref
         try:
             out_refs = out_ref.get().get(u'outlinks')
-            print(out_refs)
-            print(str(in_ref.id))
             out_refs.remove(str(in_ref.id))
             out_ref.update({u'outlinks':out_refs})
-            return True
         except KeyError:
             return False
 
-        # Update in_doc.in_refs with out_doc.ref
+        # Update in_obj.in_refs with out_obj.ref
         try:
             in_refs = in_ref.get().get(u'inlinks')
             in_refs.remove(str(out_ref.id))
             in_ref.update({u'inlinks':in_refs})
-            return True
         except KeyError:
             return False
 
+        return True
+
     def add_note(self, note, doc):
-        doc_ref = self._get_doc(doc)
+        doc_ref = doc.db_reference
         if doc_ref is None:
             print("Please add current doc to database before adding notes.")
             return
@@ -146,16 +137,16 @@ class DatabaseDocMixin():
         note_refs.add(note.to_dict())
 
     def get_notes(self, doc):
-        doc_ref = self._get_doc(doc)
+        doc_ref = doc.db_reference
         if doc_ref is None:
             print("Please add current doc to database first.")
             return
 
         note_refs = doc_ref.collection(u'notes').get()
-        return [Note.from_ref(note) for note in note_refs]
+        return [Note.from_snapshot(note) for note in note_refs]
 
     def delete_note(self, note, doc):
-        doc_ref = self._get_doc(doc)
+        doc_ref = doc.db_reference
         if doc_ref is None:
             return False
         note_snapshots = doc_ref.collection(u'notes').get()
@@ -229,14 +220,14 @@ class DatabaseAuthorMixin():
 
 #     def get_notes_by_obj(self, obj, notetype):
 #         notes = self._get_notes(notetype).where(u'ref_id', u'==', obj.id).stream()
-#         note_list = [Note.from_ref(note) for note in notes]
+#         note_list = [Note.from_snapshot(note) for note in notes]
 #         return note_list
 
 #     def get_all_notes_by_obj(self, obj):
 #         all_notes = []
 #         for notetype in Note.valid_notetypes:
 #             notes = self._get_notes(notetype).where(u'ref_id', u'==', obj.id).stream()
-#             note_list = [Note.from_ref(note) for note in notes]
+#             note_list = [Note.from_snapshot(note) for note in notes]
 #             all_notes += note_list
 #         return all_notes
 

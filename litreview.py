@@ -67,19 +67,29 @@ class LitreviewShell(cmd2.Cmd):
     def get_notes(self):
         return self.all_notes
 
-    def set_current_doc(self, *args):
-        if not args:
-            doc_index = self.current_doc_index
-        else:
-            doc_index = args[0]
+    def set_current_doc(self, doc_obj=None):
+        # if not args:
+        #     doc_index = self.current_doc_index
+        # else:
+        #     doc_index = args[0]
 
-        if doc_index is None:
+        if doc_obj is None:
+            print("Error. Unable to set current doc.")
             return
 
-        if doc_index >= 0 and doc_index < len(self.all_docs):
-            self.current_doc_index = doc_index
-            self.current_doc = self.all_docs[self.current_doc_index]
+        if doc_obj in self.all_docs:
+            self.current_doc = doc_obj
             self.reload_notes()
+            return
+        else:
+            matching_docs = [d for d in self.all_docs if d.id == doc_obj.id]
+            if len(matching_docs) > 0:
+                self.current_doc = matching_docs[0]
+                self.reload_notes()
+                return
+            else:
+                print("Error. Unable to set current doc.")
+                return
 
     def print_indented(self, formatted_text, indentation_multiplier = 1):
         print(textwrap.fill(formatted_text,
@@ -230,7 +240,7 @@ class LitreviewShell(cmd2.Cmd):
                 return
 
         self.reset()
-        self.set_current_doc(int(line))
+        self.set_current_doc(self.all_docs[int(line)])
         self.update_prompt()
         self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
@@ -300,7 +310,7 @@ class LitreviewShell(cmd2.Cmd):
 
         self.db.add_link(self.current_doc, in_doc)
         self.reload_docs()
-        self.set_current_doc()
+        self.set_current_doc(self.current_doc)
 
     def do_delete_link(self, line):
         if self.current_doc is None:
@@ -334,7 +344,7 @@ class LitreviewShell(cmd2.Cmd):
         deleted = self.db.delete_link(self.current_doc, self.all_docs[index_map[int(line)]])
         if deleted == True:
             self.reload_docs()
-            self.set_current_doc()
+            self.set_current_doc(self.current_doc)
             print("")
             print("Link deleted.")
             print("")
@@ -394,7 +404,7 @@ class LitreviewShell(cmd2.Cmd):
 
         self.link_history.append(self.current_doc)
         self.reset()
-        self.set_current_doc(index_map[int(line)])
+        self.set_current_doc(self.all_docs[index_map[int(line)]])
         self.update_prompt()
         self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
@@ -422,8 +432,7 @@ class LitreviewShell(cmd2.Cmd):
             return
         self.reset()
         new_current_doc = self.link_history.pop()
-        new_current_doc_index = self.all_docs.index(new_current_doc)
-        self.set_current_doc(new_current_doc_index)
+        self.set_current_doc(new_current_doc)
         self.update_prompt()
         self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
