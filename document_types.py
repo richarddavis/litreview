@@ -16,6 +16,7 @@ class Doc():
         self.outlinks = outlinks
         self.id = id
         self.update_time = update_time
+        self.attached_notes = []
         self.db_reference = None
         self.db_snapshot = db_snapshot
         if self.db_snapshot is not None:
@@ -76,6 +77,12 @@ class Doc():
             doc[u'id'] = self.id
 
         return doc
+
+    def get_attached_notes(self):
+        return self.attached_notes
+
+    def set_attached_notes(self, note_list):
+        self.attached_notes = note_list
 
 class Author():
     def __init__(self, lastname, firstname, doc_count=0, affiliation=None, email=None, id=None, update_time=None, db_snapshot=None):

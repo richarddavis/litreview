@@ -46,6 +46,8 @@ class DatabaseDocMixin():
         docs = self._get_docs()
         doc_objs = [Doc.from_snapshot(p) for p in docs.stream()]
         doc_objs.sort()
+        for doc_obj in doc_objs:
+            doc_obj.set_attached_notes(self.get_notes(doc_obj))
         return doc_objs
 
     def delete_doc(self, doc):
@@ -140,7 +142,7 @@ class DatabaseDocMixin():
         doc_ref = doc.db_reference
         if doc_ref is None:
             print("Please add current doc to database first.")
-            return
+            return []
 
         note_refs = doc_ref.collection(u'notes').get()
         return [Note.from_snapshot(note) for note in note_refs]

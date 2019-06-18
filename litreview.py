@@ -1,6 +1,6 @@
 from datetime import datetime
 from time import sleep
-from database import Database
+from model import Model
 from document_types import *
 import cmd2
 import textwrap
@@ -15,30 +15,24 @@ class LitreviewShell(cmd2.Cmd):
         self.INDENT = 5
         self.intro = u'\nWelcome to the Literature Review Shell. Type help or ? to list commands.\n'
         self.prompt = u'(lr) '
-        self.db = Database()
-        self.current_doc = None
-        self.current_doc_index = None
+        self.model = Model()
         self.child_notes = []
-        self.child_note_index = 0
-        self.note_history = []
-        self.link_history = []
-        self.all_docs = self.db.get_docs()
-        self.all_notes = []
-
-    def reset(self):
-        self.prompt = u'(lr) '
-        self.current_doc = None
-        self.current_doc_index = None
-        self.child_notes = []
-        self.child_note_index = 0
-        self.note_history = []
-        self.all_notes = []
 
     def update_prompt(self):
-        if self.current_doc is None:
+        current_doc = self.model.get_current_doc()
+        if current_doc is None:
             return
-        truncated_title = self.current_doc.title[:40]
+        truncated_title = current_doc.title[:40]
         self.prompt = u'(lr: ' + truncated_title + u'...) '
+
+    def print_indented(self, formatted_text, indentation_multiplier = 1):
+        print(textwrap.fill(formatted_text,
+                            initial_indent = " " * self.INDENT * indentation_multiplier,
+                            subsequent_indent  = " " * self.INDENT * indentation_multiplier,
+                            width = 150))
+
+    def do_history(self, line):
+        print(self.model.history_get())
 
     def do_whereami(self, line):
         truncated = True
@@ -46,16 +40,19 @@ class LitreviewShell(cmd2.Cmd):
             truncated = False
 
         if truncated == True:
-            if self.current_doc is not None:
-                self.print_indented("Current doc: {}...".format(self.current_doc.title[:40]))
+            current_doc = self.model.get_current_doc()
+            if current_doc is not None:
+                self.print_indented("Current doc: {}...".format(current_doc.title[:40]))
             if self.get_current_note() is not None:
                 self.print_indented("Current note: {}...".format(self.get_current_note().body[:40]))
         else:
-            if self.current_doc is not None:
-                self.print_indented("Current doc: {}".format(self.current_doc.title))
+            current_doc = self.model.get_current_doc()
+            if current_doc is not None:
+                self.print_indented("Current doc: {}".format(current_doc.title))
             if self.get_current_note() is not None:
                 self.print_indented("Current note: {}".format(self.get_current_note().body))
 
+    # TODO: Check that this problem is solved.
     # PROBLEM: When self.reload_docs() or self.reload_notes() is called,
     # link_history and note_history will both be corrupted.
     # Keep in mind that self.all_docs and self.all_notes are sorted, so simply replacing them
@@ -65,52 +62,24 @@ class LitreviewShell(cmd2.Cmd):
     # history could be managed by a helper function that accepts and returns objects, but
     # works with ids and indices internally.
 
-    def reload_docs(self):
-        self.all_docs = self.db.get_docs()
-
-    def reload_notes(self):
-        if self.current_doc == None:
-            return
-        self.all_notes = self.db.get_notes(self.current_doc)
+    def get_docs(self):
+        return self.model.get_docs()
 
     def get_notes(self):
-        return self.all_notes
+        return self.model.get_notes()
 
-    def set_current_doc(self, doc_obj=None):
-        # if not args:
-        #     doc_index = self.current_doc_index
-        # else:
-        #     doc_index = args[0]
+    def set_current_obj(self, obj):
+        self.model.set_current_obj(obj)
 
-        if doc_obj is None:
-            print("Error. Unable to set current doc.")
-            return
-
-        if doc_obj in self.all_docs:
-            self.current_doc = doc_obj
-            self.reload_notes()
-            return
-        else:
-            matching_docs = [d for d in self.all_docs if d.id == doc_obj.id]
-            if len(matching_docs) > 0:
-                self.current_doc = matching_docs[0]
-                self.reload_notes()
-                return
-            else:
-                print("Error. Unable to set current doc.")
-                return
-
-    def print_indented(self, formatted_text, indentation_multiplier = 1):
-        print(textwrap.fill(formatted_text,
-                            initial_indent = " " * self.INDENT * indentation_multiplier,
-                            subsequent_indent  = " " * self.INDENT * indentation_multiplier,
-                            width = 150))
+    def get_current_doc(self):
+        return self.model.get_current_doc()
 
     def get_current_note(self):
-        if self.note_history == []:
-            return None
-        else:
-            return self.note_history[-1]
+        return self.model.get_current_note()
+
+    def get_current_obj(self):
+        current_obj = self.model.history_head()
+        return current_obj # Returns object or None
 
     def do_add_doc(self, line):
         print("")
@@ -171,20 +140,18 @@ class LitreviewShell(cmd2.Cmd):
             print("")
 
         doc = Doc(**doc_dict)
-        self.db.add_doc(doc)
-        self.all_docs = self.db.get_docs()
+        self.model.add_doc(doc)
 
     def do_delete_doc(self, line):
         print("")
-        if line == "" and self.current_doc is not None:
-            # Delete self.current_doc
-            self.print_indented("Selected doc: {0}".format(self.current_doc.title))
+        current_doc = self.model.get_current_doc()
+        if line == "" and current_doc is not None:
+            # Delete current_doc
+            self.print_indented("Selected doc: {0}".format(current_doc.title))
             try:
                 if input("Delete this doc? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_doc(self.current_doc)
+                    deleted = self.model.delete_doc(current_doc)
                     if deleted == True:
-                        self.reset()
-                        self.reload_docs()
                         print("")
                         print("Doc deleted.")
                         print("")
@@ -197,10 +164,11 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
         else:
-            while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
+            all_docs = self.get_docs()
+            while not (line != "" and line.isnumeric() and int(line) < len(all_docs) and int(line) >= 0):
                 print("")
                 doc_index = 0
-                for doc in self.all_docs:
+                for doc in all_docs:
                     self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
                     doc_index += 1
                     print("")
@@ -209,13 +177,12 @@ class LitreviewShell(cmd2.Cmd):
                 except EOFError:
                     return
 
-            self.print_indented("Selected doc: {0}".format(self.all_docs[int(line)].title))
+            self.print_indented("Selected doc: {0}".format(all_docs[int(line)].title))
             try:
                 if input("Delete this doc? Y/n: ").lower() == u'y':
-                    deleted = self.db.delete_doc(self.all_docs[int(line)])
+                    # Need
+                    deleted = self.model.delete_doc(all_docs[int(line)])
                     if deleted == True:
-                        self.reset()
-                        self.reload_docs()
                         print("")
                         print("Doc deleted.")
                         print("")
@@ -230,16 +197,18 @@ class LitreviewShell(cmd2.Cmd):
 
     def do_docs(self, line):
         doc_index = 0
-        for doc in self.all_docs:
+        all_docs = self.get_docs()
+        for doc in all_docs:
             self.do_doc_info(str(doc_index))
             doc_index += 1
         print("")
 
     def do_select_doc(self, line):
-        while not (line != "" and line.isnumeric() and int(line) < len(self.all_docs) and int(line) >= 0):
+        all_docs = self.get_docs()
+        while not (line != "" and line.isnumeric() and int(line) < len(all_docs) and int(line) >= 0):
             print("")
             doc_index = 0
-            for doc in self.all_docs:
+            for doc in all_docs:
                 self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
                 doc_index += 1
                 print("")
@@ -248,22 +217,21 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
 
-        self.reset()
-        self.set_current_doc(self.all_docs[int(line)])
+        self.set_current_obj(all_docs[int(line)])
         self.update_prompt()
-        self.child_notes = self.get_child_notes(self.current_doc)
         self.do_note_tree("")
 
     def do_doc(self, line):
-        if self.current_doc is None:
+        current_doc = self.model.get_current_doc()
+        if current_doc is None:
             return
 
         if line == "links":
-            self.get_links(self.current_doc)
+            self.get_links(current_doc)
             return
         else:
             print("")
-            self.print_doc_info(self.current_doc)
+            self.print_doc_info(current_doc)
             print("")
             return
 
@@ -278,33 +246,34 @@ class LitreviewShell(cmd2.Cmd):
             self.print_indented("{0}, {1}".format(author[u'lastname'], author[u'firstname']), 2)
         self.print_indented("DOI: {0}".format(doc.doi))
         self.print_indented("Year: {0}".format(doc.year))
-        self.print_indented("Number of notes: {0}".format(len(self.db.get_notes(doc))))
+        self.print_indented("Number of notes: {0}".format(len(doc.attached_notes))) # Do more with this
 
     def do_doc_info(self, line):
         doc = None
+        all_docs = self.get_docs()
         if line != "" and line.isnumeric():
-            if int(line) >= len(self.all_docs) or int(line) < 0:
+            if int(line) >= len(all_docs) or int(line) < 0:
                 print("")
                 print("That doc does not exist.")
                 print("")
                 return
             else:
-                doc = self.all_docs[int(line)]
+                doc = all_docs[int(line)]
                 print("")
                 self.print_indented("[{}]".format(line))
         else:
-            if self.current_doc == None:
+            if self.get_current_doc() == None:
                 print("")
                 print("Please select a doc first.")
                 print("")
                 return
             else:
-                doc = self.current_doc
+                doc = self.get_current_doc()
 
         self.print_doc_info(doc)
 
     def do_link(self, line):
-        if self.current_doc is None:
+        if self.get_current_doc() is None:
             print("")
             print("Please select a doc first.")
             print("")
@@ -328,8 +297,9 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             choice = ""
             doc_index = 0
-            while not (choice != "" and choice.isnumeric() and int(choice) < len(self.all_docs) and int(choice) >= 0):
-                for doc in self.all_docs:
+            all_docs = self.get_docs()
+            while not (choice != "" and choice.isnumeric() and int(choice) < len(all_docs) and int(choice) >= 0):
+                for doc in all_docs:
                     self.print_indented("[{0}]: {1}".format(doc_index, doc.title))
                     doc_index += 1
                     print("")
@@ -337,7 +307,7 @@ class LitreviewShell(cmd2.Cmd):
                     choice = input('Please select the doc to link to: ')
                 except EOFError:
                     return
-            in_obj = self.all_docs[int(choice)]
+            in_obj = all_docs[int(choice)]
         elif link_to == "note":
             pass
 
@@ -345,29 +315,25 @@ class LitreviewShell(cmd2.Cmd):
             return
 
         if link_from == "doc":
-            self.db.add_link(self.current_doc, in_obj)
-            self.reload_docs()
-            self.set_current_doc(self.current_doc)
+            self.model.create_link(self.get_current_doc(), in_obj)
         elif link_from == "note":
-            self.db.add_link(self.get_current_note(), in_obj)
-            self.reload_notes()
-            # PROBLEM: Reload notes is not refreshing the current_note.
-            # See how set_current_doc works for a possible fix.
+            self.model.create_link(self.get_current_note(), in_obj)
 
     def do_delete_link(self, line):
-        if self.current_doc is None:
+        if self.get_current_doc() is None:
             print("")
             print("Please select a doc first.")
             print("")
             return
 
-        outlinks = self.current_doc.outlinks
+        outlinks = self.get_current_doc().outlinks
         self.print_indented("Outlinks:")
         index_map = {}
         current_index = 0
         for outlinks_doc_id in outlinks:
             master_index = 0
-            for doc in self.all_docs:
+            all_docs = self.get_docs()
+            for doc in all_docs:
                 if outlinks_doc_id == doc.id:
                     self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
                     index_map[current_index] = master_index
@@ -383,10 +349,9 @@ class LitreviewShell(cmd2.Cmd):
         if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
             return
 
-        deleted = self.db.delete_link(self.current_doc, self.all_docs[index_map[int(line)]])
+        all_docs = self.get_docs()
+        deleted = self.model.delete_link(self.get_current_doc(), all_docs[index_map[int(line)]])
         if deleted == True:
-            self.reload_docs()
-            self.set_current_doc(self.current_doc)
             print("")
             print("Link deleted.")
             print("")
@@ -397,90 +362,80 @@ class LitreviewShell(cmd2.Cmd):
             print("")
             return
 
+    def do_links(self, line):
+        self.get_links(self.get_current_obj())
+
     def get_links(self, obj=None):
 
         if obj is None:
             return
 
         outlinks = obj.outlinks
-        index_map = {}
-        current_index = 0
+        inlinks = obj.inlinks
+
+        link_list = []
+        link_list_index = 0
         print("")
 
         if len(outlinks) > 0:
             self.print_indented("Outlinks:")
             print("")
-            for outlinks_doc_id in outlinks:
-                master_index = 0
-                for doc in self.all_docs:
-                    if outlinks_doc_id == doc.id:
-                        self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
-                        index_map[current_index] = master_index
-                        print("")
-                    master_index += 1
-                current_index += 1
+            for outlink_id in outlinks:
+                if self.model.get_doc(outlink_id) is not None:
+                    doc = self.model.get_doc(outlink_id)
+                    link_list.append(doc)
+                    self.print_indented("[{0}]: {1}".format(link_list_index, doc.title[:40]), 2)
+                    link_list_index += 1
+                elif self.model.get_note(outlink_id) is not None:
+                    note = self.model.get_note(outlink_id)
+                    link_list.append(note)
+                    self.print_indented("[{0}]: {1}".format(link_list_index, note.body[:40]), 2)
+                    link_list_index += 1
 
-        inlinks = obj.inlinks
         if len(inlinks) > 0:
             self.print_indented("Inlinks:")
-            for inlinks_id in inlinks:
-                master_index = 0
-                for doc in self.all_docs:
-                    if inlinks_id == doc.id:
-                        self.print_indented("[{0}]: {1}".format(current_index, doc.title), 2)
-                        index_map[current_index] = master_index
-                        print("")
-                    master_index += 1
-                current_index += 1
             print("")
+            for inlink_id in inlinks:
+                print(inlink_id)
+                print(self.model.all_doc_ids)
+                print(self.model.all_note_ids)
+                if self.model.get_doc(inlink_id) is not None:
+                    doc = self.model.get_doc(inlink_id)
+                    link_list.append(doc)
+                    self.print_indented("[{0}]: {1}".format(link_list_index, doc.title[:40]), 2)
+                    link_list_index += 1
+                elif self.model.get_note(inlink_id) is not None:
+                    note = self.model.get_note(inlink_id)
+                    link_list.append(note)
+                    self.print_indented("[{0}]: {1}".format(link_list_index, note.body[:40]), 2)
+                    link_list_index += 1
 
+        print("")
         try:
-            line = input('Jump to doc: ')
+            line = input('Jump to link: ')
         except EOFError:
             return
 
-        if not (line != "" and line.isnumeric() and int(line) < len(index_map) and int(line) >= 0):
-            return
-
-        self.link_history.append(obj)
-        self.reset()
-        self.set_current_doc(self.all_docs[index_map[int(line)]])
-        self.update_prompt()
-        self.child_notes = self.get_child_notes(obj)
-        self.do_note_tree("")
-
-    # PROBLEM: Since I've added the ability to link from notes, the pop functions may be broken.
-
-    def do_pop(self, line):
-        if line == "note":
-            self.pop_note("")
-        elif line == "doc":
-            self.pop_link("")
-        else:
-            if self.note_history != []:
-                self.pop_note("")
-            elif self.link_history != []:
-                self.pop_link("")
-            else:
-                print("")
-                print("Nothing to pop.")
-                print("")
-
-    def pop_link(self, line):
-        if self.link_history == []:
-            print("")
-            print("Already at beginning.")
+        if not (line != "" and line.isnumeric() and int(line) < len(link_list) and int(line) >= 0):
             print("")
             return
-        self.reset()
-        new_current_doc = self.link_history.pop()
-        self.set_current_doc(new_current_doc)
+
+        jumping_to_obj = link_list[int(line)]
+
+        self.set_current_obj(jumping_to_obj)
         self.update_prompt()
-        self.child_notes = self.get_child_notes(self.current_doc)
-        self.do_note_tree("")
+
+    def do_back(self, line):
+        if self.model.history_back() is None:
+            print("")
+            print("Already at beginning of history.")
+            print("")
+            return
+
+        self.update_prompt()
 
     def get_notetypes_by_obj(self, target_obj):
-        if self.current_doc is None:
+        if self.get_current_doc() is None:
             print("")
             print("Please select a doc first.")
             print("")
@@ -489,7 +444,7 @@ class LitreviewShell(cmd2.Cmd):
         return list({note.notetype for note in all_notes if note.ref_id == target_obj.id})
 
     def get_notes_by_obj(self, target_obj):
-        if self.current_doc is None:
+        if self.get_current_doc() is None:
             print("")
             print("Please select a doc first.")
             print("")
@@ -502,16 +457,12 @@ class LitreviewShell(cmd2.Cmd):
     def do_add_note(self, line):
         print("")
         note_dict = {}
-        if self.current_doc == None:
+
+        target_obj = get_current_obj()
+        if target_obj is None:
             print("Pleast select a doc first.")
             print("")
             return
-
-        target_obj = None
-        if self.note_history == []:
-            target_obj = self.current_doc
-        else:
-            target_obj = self.note_history[-1]
 
         note_dict[u'ref_id'] = target_obj.id
 
@@ -552,37 +503,31 @@ class LitreviewShell(cmd2.Cmd):
             note_dict[u'page'] = page
 
         note = Note(**note_dict)
-        self.db.add_note(note, self.current_doc)
-        self.reload_notes()
-        self.child_notes = self.get_child_notes(target_obj)
+        self.model.add_note(note, self.get_current_doc())
 
     def do_delete_note(self, line):
         print("")
-        if line == "" and self.get_current_note() is not None:
+        if line == "":
             current_note = self.get_current_note()
+            if current_note is None:
+                print ("No current note.")
+                print ("")
+                return None
+
             self.print_indented("Selected note: {0}".format(current_note.body))
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
-                    note_to_delete = current_note
-                    deleted = self.db.delete_note(note_to_delete, self.current_doc)
+                    deleted = self.model.delete_note(current_note, self.get_current_doc())
                     if deleted == True:
-                        try:
-                            self.note_history.remove(note_to_delete)
-                        except ValueError:
-                            pass
-
-                        self.reload_notes()
-                        if self.note_history == []:
-                            self.child_notes = self.get_child_notes(self.current_doc)
-                        else:
-                            self.child_notes = self.get_child_notes(self.get_current_note())
-
                         print("")
                         print ("Note deleted.")
                         print("")
                         return
                     else:
+                        print("")
                         print ("Error: Note not deleted.")
+                        print("")
+                        return
                 else:
                     print("")
                     print("Cancelled note deletion.")
@@ -591,10 +536,11 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
         else:
-            while not (line != "" and line.isnumeric() and int(line) < len(self.child_notes) and int(line) >= 0):
+            child_notes = self.get_child_notes()
+            while not (line != "" and line.isnumeric() and int(line) < len(child_notes) and int(line) >= 0):
                 print("")
                 note_index = 0
-                for note in self.child_notes:
+                for note in child_notes:
                     self.print_indented("[{0}]: {1}".format(note_index, note.body))
                     note_index += 1
                     print("")
@@ -603,24 +549,12 @@ class LitreviewShell(cmd2.Cmd):
                 except EOFError:
                     return
 
-            self.print_indented("Selected note: {0}".format(self.child_notes[int(line)].body))
+            self.print_indented("Selected note: {0}".format(child_notes[int(line)].body))
             try:
                 if input("Delete this note? Y/n: ").lower() == u'y':
-                    note_to_delete = self.child_notes[int(line)]
-                    deleted = self.db.delete_note(note_to_delete, self.current_doc)
+                    note_to_delete = child_notes[int(line)]
+                    deleted = self.model.delete_note(note_to_delete, self.get_current_doc())
                     if deleted == True:
-
-                        try:
-                            self.note_history.remove(note_to_delete)
-                        except ValueError:
-                            pass
-
-                        self.reload_notes()
-                        if self.note_history == []:
-                            self.child_notes = self.get_child_notes(self.current_doc)
-                        else:
-                            self.child_notes = self.get_child_notes(self.get_current_note())
-
                         print("")
                         print("Note deleted.")
                         print("")
@@ -636,13 +570,14 @@ class LitreviewShell(cmd2.Cmd):
                 return
 
     def do_notes(self, line):
-        if self.current_doc == None:
+        current_obj = self.get_current_obj()
+        if current_obj == None:
             print("")
-            print("Please select a doc first.")
+            print("Please select a doc or note first.")
             print("")
             return
 
-        if self.child_notes == []:
+        if self.get_child_notes(current_obj) == []:
             print("")
             print("No attached notes.")
             print("")
@@ -654,7 +589,7 @@ class LitreviewShell(cmd2.Cmd):
 
         note_index = 0
         print("")
-        for note in self.child_notes:
+        for note in self.get_child_notes(current_obj):
             self.print_indented("[Note {0}:]".format(note_index))
             self.print_note_info(note, truncated=truncated)
             print("")
@@ -662,7 +597,7 @@ class LitreviewShell(cmd2.Cmd):
 
     def do_select_note(self, line):
         note_indices = line.split()
-        if len(note_indices) == 0:
+        if not note_indices:
             self.do_notes("")
             try:
                 line = input('Please select a note: ')
@@ -670,55 +605,42 @@ class LitreviewShell(cmd2.Cmd):
             except EOFError:
                 return
 
-        current_note_backup = self.get_current_note()
-        child_notes_backup = self.child_notes
+        display_notes = self.get_child_notes(self.get_current_obj())
 
+        interim_note = None
         for ni in note_indices:
-            if not (ni.isnumeric() and int(ni) < len(self.child_notes) and int(ni) >= 0):
-                self.child_notes = child_notes_backup
+            if not (ni.isnumeric() and int(ni) < len(display_notes) and int(ni) >= 0):
                 print("")
                 print("No note selected.")
                 print("")
                 return
             else:
-                temp_note = self.child_notes[int(ni)]
-                self.child_notes = self.get_child_notes(temp_note)
+                interim_note = display_notes[int(ni)]
+                display_notes = self.get_child_notes(interim_note)
                 # print("temp_note is {}".format(temp_note))
                 # print("get_child_notes() returned {}".format(self.child_notes))
 
-        self.note_history.append(temp_note)
+        self.set_current_obj(interim_note)
         self.do_notes("")
 
-    def pop_note(self, line):
-        if self.note_history == []:
-            print("")
-            print("Already at top level.")
-            print("")
-            return
+    def get_child_notes(self, target_obj=None):
+        target = target_obj
+        if target is None:
+            if self.get_current_obj() is None:
+                print("")
+                print("Please select a doc or note first.")
+                print("")
+                return
+            else:
+                target = self.get_current_obj()
 
-        self.note_history.pop()
-
-        if self.note_history == []:
-            self.child_notes = self.get_child_notes(self.current_doc)
-        else:
-            self.child_notes = self.get_child_notes(self.get_current_note())
-
-        self.do_notes("")
-
-    def get_child_notes(self, target_obj):
-        if self.current_doc is None:
-            print("")
-            print("Please select a doc first.")
-            print("")
-            return
         all_notes = self.get_notes()
         child_notes = []
         for note in all_notes:
-            if note.ref_id == target_obj.id:
+            if note.ref_id == target.id:
                 child_notes.append(note)
 
         child_notes.sort()
-        self.child_note_index = 0
         return child_notes
 
     def print_note_info(self, note, indentation_multiplier=1, truncated=True, verbose=True):
@@ -757,37 +679,15 @@ class LitreviewShell(cmd2.Cmd):
         print("")
         return
 
-    def do_get_next_note(self, line):
-        print("")
-        if self.child_notes == []:
-            print("No notes at current level.")
-            print("")
-            return
-        elif self.child_note_index >= len(self.child_notes):
-            print("Returning to the first note at the current level.")
-            print("")
-            self.child_note_index = 0
-
-        note = self.child_notes[self.child_note_index]
-
-        self.print_indented("Notetype: {0}".format(note.notetype))
-        self.print_indented("Body: {0}".format(note.body))
-        self.print_indented("Attached notetypes:")
-        notetypes = self.get_notetypes_by_obj(note)
-        for notetype in notetypes:
-            self.print_indented(notetype, 2)
-        self.child_note_index += 1
-        print("")
-
     def do_note_tree(self, line):
         depth = 1
-        root_node = self.current_doc
+        root_node = self.get_current_doc()
         if root_node is None:
             print("")
             print("No doc selected.")
             print("")
             return
-        if self.current_doc.id is None:
+        if root_node.id is None:
             print("")
             print("Currently selected doc has no id.")
             print("")
@@ -801,8 +701,7 @@ class LitreviewShell(cmd2.Cmd):
         if line != "":
             truncated = False
 
-        # note_list = self.db.get_all_notes_by_obj(self.current_doc)
-        note_list = self.get_notes_by_obj(self.current_doc)
+        note_list = self.get_notes_by_obj(self.get_current_doc())
         if note_list == []:
             print("")
             print("No notes to show.")
