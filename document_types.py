@@ -143,7 +143,6 @@ class Note():
                        "hypotheses", "reflections"]
 
     def __init__(self, ref_id, notetype, body, id=None, page=None, inlinks=[], outlinks=[], update_time=None, db_snapshot=None):
-        self.sortattr = 'page'
         self.ref_id = ref_id
         self.notetype = notetype
         self.body = body

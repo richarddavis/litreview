@@ -8,6 +8,7 @@ verify_ssl = true
 [packages]
 firebase-admin = "*"
 cmd2 = "*"
+pypubsub = "*"
 
 [requires]
 python_version = "3.7"

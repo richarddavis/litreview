@@ -32,7 +32,7 @@ class LitreviewShell(cmd2.Cmd):
                             width = 150))
 
     def do_history(self, line):
-        print(self.model.history_get())
+        print(self.model.history)
 
     def do_whereami(self, line):
         truncated = True
@@ -78,8 +78,7 @@ class LitreviewShell(cmd2.Cmd):
         return self.model.get_current_note()
 
     def get_current_obj(self):
-        current_obj = self.model.history_head()
-        return current_obj # Returns object or None
+        return self.model.get_current_obj() # Returns obj or None
 
     def do_add_doc(self, line):
         print("")
@@ -327,6 +326,9 @@ class LitreviewShell(cmd2.Cmd):
             return
 
         outlinks = self.get_current_doc().outlinks
+        if not outlinks:
+            return None
+
         self.print_indented("Outlinks:")
         index_map = {}
         current_index = 0
@@ -379,38 +381,41 @@ class LitreviewShell(cmd2.Cmd):
 
         if len(outlinks) > 0:
             self.print_indented("Outlinks:")
-            print("")
             for outlink_id in outlinks:
                 if self.model.get_doc(outlink_id) is not None:
                     doc = self.model.get_doc(outlink_id)
                     link_list.append(doc)
+                    print("")
                     self.print_indented("[{0}]: {1}".format(link_list_index, doc.title[:40]), 2)
                     link_list_index += 1
                 elif self.model.get_note(outlink_id) is not None:
                     note = self.model.get_note(outlink_id)
                     link_list.append(note)
+                    print("")
                     self.print_indented("[{0}]: {1}".format(link_list_index, note.body[:40]), 2)
                     link_list_index += 1
+            print("")
 
         if len(inlinks) > 0:
             self.print_indented("Inlinks:")
-            print("")
             for inlink_id in inlinks:
-                print(inlink_id)
-                print(self.model.all_doc_ids)
-                print(self.model.all_note_ids)
                 if self.model.get_doc(inlink_id) is not None:
                     doc = self.model.get_doc(inlink_id)
                     link_list.append(doc)
+                    print("")
                     self.print_indented("[{0}]: {1}".format(link_list_index, doc.title[:40]), 2)
                     link_list_index += 1
                 elif self.model.get_note(inlink_id) is not None:
                     note = self.model.get_note(inlink_id)
                     link_list.append(note)
+                    print("")
                     self.print_indented("[{0}]: {1}".format(link_list_index, note.body[:40]), 2)
                     link_list_index += 1
+            print("")
 
-        print("")
+        if not link_list:
+            return
+
         try:
             line = input('Jump to link: ')
         except EOFError:
@@ -426,9 +431,9 @@ class LitreviewShell(cmd2.Cmd):
         self.update_prompt()
 
     def do_back(self, line):
-        if self.model.history_back() is None:
+        if self.model.history.back() is None:
             print("")
-            print("Already at beginning of history.")
+            print("At beginning of history.")
             print("")
             return
 
@@ -458,7 +463,7 @@ class LitreviewShell(cmd2.Cmd):
         print("")
         note_dict = {}
 
-        target_obj = get_current_obj()
+        target_obj = self.get_current_obj()
         if target_obj is None:
             print("Pleast select a doc first.")
             print("")
